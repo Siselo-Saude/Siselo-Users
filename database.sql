@@ -19,9 +19,15 @@ CREATE TABLE users (
   must_change_password TINYINT(1) NOT NULL DEFAULT 0,
   user_type VARCHAR(10) NULL,
   specialty VARCHAR(80) NULL,
+  external_provider VARCHAR(40) NULL,
+  external_username VARCHAR(120) NULL,
+  external_group VARCHAR(190) NULL,
+  profile_completed TINYINT(1) NOT NULL DEFAULT 1,
+  last_external_login_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
   deleted_at DATETIME NULL,
+  INDEX idx_users_external_identity (external_provider, external_username),
   FOREIGN KEY (approved_by_user_id) REFERENCES users(id)
 );
 

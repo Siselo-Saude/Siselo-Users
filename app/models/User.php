@@ -59,6 +59,24 @@ final class User {
     return $row ?: null;
   }
 
+  public static function findByExternalIdentity(PDO $pdo, string $provider, string $username): ?array {
+    $stmt = $pdo->prepare('
+      SELECT *
+      FROM users
+      WHERE external_provider = :provider
+        AND external_username = :username
+        AND deleted_at IS NULL
+      LIMIT 1
+    ');
+    $stmt->execute([
+      ':provider' => $provider,
+      ':username' => $username,
+    ]);
+    $row = $stmt->fetch();
+
+    return $row ?: null;
+  }
+
   public static function apiPayload(PDO $pdo, array $user): array {
     $userId = (int)$user['id'];
 
@@ -73,6 +91,8 @@ final class User {
       'must_change_password' => (int)$user['must_change_password'],
       'user_type' => isset($user['user_type']) ? (string)$user['user_type'] : null,
       'specialty' => isset($user['specialty']) ? (string)$user['specialty'] : null,
+      'external_provider' => isset($user['external_provider']) ? (string)$user['external_provider'] : null,
+      'profile_completed' => (int)($user['profile_completed'] ?? 1),
       'roles' => Role::namesForUser($pdo, $userId),
       'permissions' => array_values(array_keys(user_permissions($pdo, $userId))),
     ];
@@ -109,6 +129,238 @@ final class User {
     }
 
     return null;
+  }
+
+  public static function hasRequiredProfile(array $user): bool {
+    $userType = strtoupper(trim((string)($user['user_type'] ?? '')));
+    $specialty = trim((string)($user['specialty'] ?? ''));
+
+    if (!in_array($userType, ['CADH', 'UBS'], true)) {
+      return false;
+    }
+
+    return $userType !== 'CADH' || in_array($specialty, self::authSpecialties(), true);
+  }
+
+  public static function syncFromCoopere(PDO $pdo, array $identity): array {
+    $provider = trim((string)($identity['provider'] ?? 'coopere'));
+    $username = trim((string)($identity['username'] ?? ''));
+    $name = trim((string)($identity['name'] ?? ''));
+    $email = trim((string)($identity['email'] ?? ''));
+    $group = trim((string)($identity['group'] ?? ''));
+
+    if ($provider === '' || $username === '' || $name === '' || $email === '') {
+      throw new RuntimeException('Identidade Coopere incompleta.');
+    }
+
+    if (strlen($provider) > 40 || strlen($username) > 120 || strlen($name) > 120 || strlen($group) > 190) {
+      throw new RuntimeException('Identidade Coopere excede o tamanho permitido.');
+    }
+
+    if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+      throw new RuntimeException('Email da Coopere invalido.');
+    }
+
+    $roleId = Role::idByName($pdo, 'alimentador');
+    if ($roleId === null) {
+      throw new RuntimeException('Perfil alimentador nao encontrado.');
+    }
+
+    $existing = self::findByExternalIdentity($pdo, $provider, $username);
+    if ($existing === null) {
+      $existing = self::findByEmail($pdo, $email);
+    }
+
+    $emailStmt = $pdo->prepare('SELECT id FROM users WHERE email = :email AND deleted_at IS NULL LIMIT 1');
+    $emailStmt->execute([':email' => $email]);
+    $emailUserId = $emailStmt->fetchColumn();
+    if ($emailUserId !== false && ($existing === null || (int)$emailUserId !== (int)$existing['id'])) {
+      throw new RuntimeException('Ja existe uma conta com este email.');
+    }
+
+    $pdo->beginTransaction();
+
+    try {
+      self::releaseDeletedEmailReservation($pdo, $email, $existing !== null ? (int)$existing['id'] : null);
+
+      if ($existing !== null) {
+        $userId = (int)$existing['id'];
+        $profileCompleted = self::hasRequiredProfile($existing) ? 1 : 0;
+        $stmt = $pdo->prepare('
+          UPDATE users
+          SET
+            name = :name,
+            email = :email,
+            is_active = 1,
+            is_approved = 1,
+            approved_at = COALESCE(approved_at, NOW()),
+            must_change_password = 0,
+            external_provider = :provider,
+            external_username = :username,
+            external_group = :external_group,
+            profile_completed = :profile_completed,
+            last_external_login_at = NOW(),
+            updated_at = NOW()
+          WHERE id = :id
+        ');
+        $stmt->execute([
+          ':name' => $name,
+          ':email' => $email,
+          ':provider' => $provider,
+          ':username' => $username,
+          ':external_group' => $group !== '' ? $group : null,
+          ':profile_completed' => $profileCompleted,
+          ':id' => $userId,
+        ]);
+
+        if (Role::idsForUser($pdo, $userId) === []) {
+          Role::syncUserRoles($pdo, $userId, [$roleId]);
+        }
+
+        Audit::log($pdo, $userId, 'update', 'users', $userId, $existing, [
+          'name' => $name,
+          'email' => $email,
+          'is_active' => 1,
+          'is_approved' => 1,
+          'external_provider' => $provider,
+          'external_username' => $username,
+          'external_group' => $group !== '' ? $group : null,
+          'profile_completed' => $profileCompleted,
+          'external_login' => true,
+        ]);
+      } else {
+        $stmt = $pdo->prepare('
+          INSERT INTO users (
+            name,
+            email,
+            password_hash,
+            is_active,
+            is_approved,
+            approved_at,
+            approved_by_user_id,
+            must_change_password,
+            user_type,
+            specialty,
+            external_provider,
+            external_username,
+            external_group,
+            profile_completed,
+            last_external_login_at
+          )
+          VALUES (
+            :name,
+            :email,
+            :password_hash,
+            1,
+            1,
+            NOW(),
+            NULL,
+            0,
+            NULL,
+            NULL,
+            :provider,
+            :username,
+            :external_group,
+            0,
+            NOW()
+          )
+        ');
+        $stmt->execute([
+          ':name' => $name,
+          ':email' => $email,
+          ':password_hash' => password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
+          ':provider' => $provider,
+          ':username' => $username,
+          ':external_group' => $group !== '' ? $group : null,
+        ]);
+
+        $userId = (int)$pdo->lastInsertId();
+        Role::syncUserRoles($pdo, $userId, [$roleId]);
+
+        Audit::log($pdo, $userId, 'create', 'users', $userId, null, [
+          'name' => $name,
+          'email' => $email,
+          'is_active' => 1,
+          'is_approved' => 1,
+          'external_provider' => $provider,
+          'external_username' => $username,
+          'external_group' => $group !== '' ? $group : null,
+          'profile_completed' => 0,
+          'role' => 'alimentador',
+          'external_login' => true,
+        ]);
+      }
+
+      $pdo->commit();
+
+      $user = self::findById($pdo, $userId);
+      if ($user === null) {
+        throw new RuntimeException('Usuario criado, mas nao foi possivel carregar a conta.');
+      }
+
+      return $user;
+    } catch (Throwable $error) {
+      if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+      }
+
+      if ($error instanceof PDOException && str_contains($error->getMessage(), 'users.email')) {
+        throw new RuntimeException('Ja existe uma conta com este email.');
+      }
+
+      throw $error;
+    }
+  }
+
+  public static function completeExternalProfile(PDO $pdo, int $id, array $payload): array {
+    $before = self::findById($pdo, $id);
+    if ($before === null) {
+      throw new RuntimeException('Usuario nao encontrado.');
+    }
+
+    $userType = strtoupper(trim((string)($payload['user_type'] ?? '')));
+    $specialty = trim((string)($payload['specialty'] ?? ''));
+
+    if (!in_array($userType, ['CADH', 'UBS'], true)) {
+      throw new RuntimeException('Tipo de usuario invalido.');
+    }
+
+    if ($userType === 'CADH' && !in_array($specialty, self::authSpecialties(), true)) {
+      throw new RuntimeException('Especialidade obrigatoria para usuarios CADH.');
+    }
+
+    if ($userType === 'UBS') {
+      $specialty = '';
+    }
+
+    $stmt = $pdo->prepare('
+      UPDATE users
+      SET
+        user_type = :user_type,
+        specialty = :specialty,
+        profile_completed = 1,
+        updated_at = NOW()
+      WHERE id = :id
+    ');
+    $stmt->execute([
+      ':user_type' => $userType,
+      ':specialty' => $specialty !== '' ? $specialty : null,
+      ':id' => $id,
+    ]);
+
+    Audit::log($pdo, $id, 'update', 'users', $id, $before, [
+      'user_type' => $userType,
+      'specialty' => $specialty !== '' ? $specialty : null,
+      'profile_completed' => 1,
+      'external_profile_completed' => true,
+    ]);
+
+    $user = self::findById($pdo, $id);
+    if ($user === null) {
+      throw new RuntimeException('Perfil atualizado, mas nao foi possivel carregar a conta.');
+    }
+
+    return $user;
   }
 
   public static function registerPublic(PDO $pdo, array $payload): array {

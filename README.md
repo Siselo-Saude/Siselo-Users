@@ -148,6 +148,72 @@ API: http://localhost:8086/api
 Frontend: http://localhost:3000
 ```
 
+## Entrada via Coopere
+
+O fluxo de entrada Coopere usa um token assinado com HMAC SHA-256. A Coopere
+deve redirecionar o usuario para o frontend do SISELO com um token:
+
+```text
+https://homologacao.sds.unb.br/coopere-login.html?token=TOKEN
+```
+
+O payload assinado deve conter:
+
+```json
+{
+  "username": "usuario.coopere",
+  "name": "Nome Completo",
+  "email": "usuario@unb.br",
+  "groups": ["Teste - UBS/CADH"],
+  "iat": 1781790000,
+  "exp": 1781790900
+}
+```
+
+Quando a API real da Coopere/eXo estiver configurada no Siselo, o token pode
+conter apenas o `username`, porque o backend consulta os dados oficiais via API:
+
+```json
+{
+  "username": "usuario.coopere",
+  "iat": 1781790000,
+  "exp": 1781790900
+}
+```
+
+Variaveis de ambiente usadas pelo backend:
+
+```text
+COOPERE_TOKEN_SECRET=segredo_compartilhado_com_a_coopere
+COOPERE_ALLOWED_GROUP=Teste - UBS/CADH
+COOPERE_GROUP_ID=160
+COOPERE_API_BASE_URL=https://coopere.exemplo.br/portal/rest
+COOPERE_API_USERNAME=usuario_de_servico
+COOPERE_API_PASSWORD=senha_do_usuario_de_servico
+COOPERE_API_TIMEOUT_SECONDS=10
+COOPERE_TOKEN_TTL_SECONDS=900
+COOPERE_DEV_MODE=0
+```
+
+Com `COOPERE_API_BASE_URL`, `COOPERE_API_USERNAME` e `COOPERE_API_PASSWORD`
+preenchidos, o Siselo chama:
+
+```text
+GET /v1/users/{username}
+GET /v1/users/{username}/memberships
+```
+
+Essas consultas carregam `email`, `fullName` e confirmam se o usuario pertence
+ao grupo configurado em `COOPERE_GROUP_ID`. Esse valor pode ser o id numerico
+do espaco/grupo informado pela Coopere, por exemplo `160`.
+
+No Docker local, `COOPERE_DEV_MODE=1` ja permite testar o fluxo sem a Coopere
+real acessando:
+
+```text
+http://localhost:3000/coopere-login.html?dev=1
+```
+
 Se os repositorios estiverem em pastas diferentes, com outro nome, ou se
 apenas o `Siselo-Users` for clonado, o container `frontend` nao encontrara o
 arquivo `server.js` e nao iniciara corretamente.

@@ -11,6 +11,7 @@ services:
       - ./database_patch_003.sql:/docker-entrypoint-initdb.d/03-database_patch_003.sql:ro
       - ./database_patch_004.sql:/docker-entrypoint-initdb.d/04-database_patch_004.sql:ro
       - ./database_patch_005.sql:/docker-entrypoint-initdb.d/05-database_patch_005.sql:ro
+      - ./database_patch_008.sql:/docker-entrypoint-initdb.d/08-database_patch_008.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
@@ -26,10 +27,11 @@ services:
       - ./database_patch_003.sql:/migrations/database_patch_003.sql:ro
       - ./database_patch_004.sql:/migrations/database_patch_004.sql:ro
       - ./database_patch_005.sql:/migrations/database_patch_005.sql:ro
+      - ./database_patch_008.sql:/migrations/database_patch_008.sql:ro
     entrypoint:
       - sh
       - -c
-      - mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_003.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_004.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_005.sql
+      - mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_003.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_004.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_005.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_008.sql
 
   users:
     build: .
@@ -47,6 +49,14 @@ services:
       DB_PASSWORD: rootpassword
       DB_NAME: intranet_cadh
       FRONTEND_ORIGIN: http://localhost:3000
+      COOPERE_TOKEN_SECRET: ${COOPERE_TOKEN_SECRET:-local-dev-coopere-secret-change-me}
+      COOPERE_ALLOWED_GROUP: ${COOPERE_ALLOWED_GROUP:-Teste - UBS/CADH}
+      COOPERE_GROUP_ID: ${COOPERE_GROUP_ID:-Teste - UBS/CADH}
+      COOPERE_API_BASE_URL: ${COOPERE_API_BASE_URL:-}
+      COOPERE_API_USERNAME: ${COOPERE_API_USERNAME:-}
+      COOPERE_API_PASSWORD: ${COOPERE_API_PASSWORD:-}
+      COOPERE_API_TIMEOUT_SECONDS: ${COOPERE_API_TIMEOUT_SECONDS:-10}
+      COOPERE_DEV_MODE: ${COOPERE_DEV_MODE:-1}
 
   frontend:
     image: node:16
