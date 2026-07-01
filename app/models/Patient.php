@@ -5,7 +5,6 @@ require_once __DIR__ . '/../services/Audit.php';
 
 final class Patient {
   private const MIN_DATE = '1900-01-01';
-  private const MAX_DATE = '2026-12-31';
 
   private const GENDER_OPTIONS = [
     'masculino' => 'Masculino',
@@ -33,6 +32,94 @@ final class Patient {
     'ametista' => 'Ametista',
     'esmeralda' => 'Esmeralda',
     'diamante' => 'Diamante',
+    'ESF EQUIPE 08 - BRANCA' => 'ESF EQUIPE 08 - BRANCA',
+    'ESF EQUIPE 09 - AMARELA' => 'ESF EQUIPE 09 - AMARELA',
+    'ESF EQUIPE 10 - AZUL' => 'ESF EQUIPE 10 - AZUL',
+    'ESF EQUIPE 11 - VERDE' => 'ESF EQUIPE 11 - VERDE',
+    'ESF EQUIPE 12 - ROSA' => 'ESF EQUIPE 12 - ROSA',
+    'ESF EQUIPE 13 - LILÁS' => 'ESF EQUIPE 13 - LILÁS',
+    'ESF EQUIPE 14 - MARROM' => 'ESF EQUIPE 14 - MARROM',
+    'ESF EQUIPE 15 - DOURADA' => 'ESF EQUIPE 15 - DOURADA',
+    'ESF EQUIPE 16 - LARANJA' => 'ESF EQUIPE 16 - LARANJA',
+    'ESF EQUIPE 17 - PRATA' => 'ESF EQUIPE 17 - PRATA',
+    'EMULTI AROEIRA' => 'EMULTI AROEIRA',
+    'ECR MESTRE DAMIÃO' => 'ECR MESTRE DAMIÃO',
+    'ESF EQUIPE 01 - QUADRA 18' => 'ESF EQUIPE 01 - QUADRA 18',
+    'ESF EQUIPE 02 - QUADRA 18' => 'ESF EQUIPE 02 - QUADRA 18',
+    'ESF EQUIPE 03 - QUADRA 18' => 'ESF EQUIPE 03 - QUADRA 18',
+    'ESF EQUIPE 18 - BURITI' => 'ESF EQUIPE 18 - BURITI',
+    'ESF EQUIPE 20 - JACARANDÁ' => 'ESF EQUIPE 20 - JACARANDÁ',
+    'ESF EQUIPE 21 - IPÊ' => 'ESF EQUIPE 21 - IPÊ',
+    'ESF EQUIPE 22 - JEQUITIBÁ' => 'ESF EQUIPE 22 - JEQUITIBÁ',
+    'ESF EQUIPE 23 - PEQUI' => 'ESF EQUIPE 23 - PEQUI',
+    'ESF EQUIPE 02 - JARDIM II' => 'ESF EQUIPE 02 - JARDIM II',
+    'ESB JARDIM II' => 'ESB JARDIM II',
+    'ESF EQUIPE QUEBRADA DOS NERES' => 'ESF EQUIPE QUEBRADA DOS NERES',
+    'ESF EQUIPE 04 - CARIRU' => 'ESF EQUIPE 04 - CARIRU',
+    'ESB CARIRU' => 'ESB CARIRU',
+    'ESF EQUIPE CAFÉ SEM TROCO' => 'ESF EQUIPE CAFÉ SEM TROCO',
+    'ESF EQUIPE PADDF' => 'ESF EQUIPE PADDF',
+    'ESF EQUIPE 07 - ROSA' => 'ESF EQUIPE 07 - ROSA',
+    'ESF EQUIPE 08 - LARANJA' => 'ESF EQUIPE 08 - LARANJA',
+    'ESF EQUIPE 09 - LILÁS' => 'ESF EQUIPE 09 - LILÁS',
+    'ESF EQUIPE 10 - CINZA' => 'ESF EQUIPE 10 - CINZA',
+    'ESF EQUIPE 12 - VERDE' => 'ESF EQUIPE 12 - VERDE',
+    'ESF EQUIPE 13 - VERMELHA' => 'ESF EQUIPE 13 - VERMELHA',
+    'ESF EQUIPE 01' => 'ESF EQUIPE 01',
+    'ESF EQUIPE 02' => 'ESF EQUIPE 02',
+    'ESF EQUIPE ESMERALDA' => 'ESF EQUIPE ESMERALDA',
+    'ESF EQUIPE 03' => 'ESF EQUIPE 03',
+    'ESF EQUIPE 04' => 'ESF EQUIPE 04',
+    'ESF EQUIPE 05' => 'ESF EQUIPE 05',
+    'ESF EQUIPE RUBI' => 'ESF EQUIPE RUBI',
+    'ESF EQUIPE 04 - LARANJA' => 'ESF EQUIPE 04 - LARANJA',
+    'ESF EQUIPE 07 - LILÁS' => 'ESF EQUIPE 07 - LILÁS',
+    'ESF EQUIPE 08 - ROSA' => 'ESF EQUIPE 08 - ROSA',
+    'ESF EQUIPE 09 - VERDE' => 'ESF EQUIPE 09 - VERDE',
+    'ESF EQUIPE 10 - VERMELHA' => 'ESF EQUIPE 10 - VERMELHA',
+    'ESF DOURADA' => 'ESF DOURADA',
+    'ESF EQUIPE T.R.E.' => 'ESF EQUIPE T.R.E.',
+    'ESF EQUIPE 12 - OESTE 2' => 'ESF EQUIPE 12 - OESTE 2',
+    'ESB OESTE SSB' => 'ESB OESTE SSB',
+    'ESF EQUIPE MORRO AZUL' => 'ESF EQUIPE MORRO AZUL',
+    'ESF EQUIPE 01 - NOVA BETANIA' => 'ESF EQUIPE 01 - NOVA BETANIA',
+    'ESB NOVA BETANIA SSB' => 'ESB NOVA BETANIA SSB',
+    'ESF EQUIPE 16 - SÃO FRANCISCO' => 'ESF EQUIPE 16 - SÃO FRANCISCO',
+    'ESF EQUIPE 02 - MORRO DA CRUZ' => 'ESF EQUIPE 02 - MORRO DA CRUZ',
+    'ESF EQUIPE 03 - CAVAS DE BAIXO' => 'ESF EQUIPE 03 - CAVAS DE BAIXO',
+    'ESF EQ 21 - BOSQUE 1' => 'ESF EQ 21 - BOSQUE 1',
+    'ESF EQUIPE 23 - VILA NOVA 2' => 'ESF EQUIPE 23 - VILA NOVA 2',
+    'ESB BOSQUE 1 SSB' => 'ESB BOSQUE 1 SSB',
+    'EMULTI IPE AMARELO' => 'EMULTI IPE AMARELO',
+    'ESF EQUIPE 22 - JOÃO CÂNDIDO' => 'ESF EQUIPE 22 - JOÃO CÂNDIDO',
+    'ESF EQUIPE 25 - BOSQUE 2' => 'ESF EQUIPE 25 - BOSQUE 2',
+    'ESF EQUIPE 17 - SÃO JOSÉ' => 'ESF EQUIPE 17 - SÃO JOSÉ',
+    'EQ. AMPLIADA 27 TIPO III CDP' => 'EQ. AMPLIADA 27 TIPO III CDP',
+    'EQ. PSICOSOCIAL 30H - 2238861' => 'EQ. PSICOSOCIAL 30H - 2238861',
+    'EQ. AMPLIADA ROSIMEIRE RODRIGUES' => 'EQ. AMPLIADA ROSIMEIRE RODRIGUES',
+    'EQ. PSICOSOCIAL 30H - 2238853' => 'EQ. PSICOSOCIAL 30H - 2238853',
+    'EQ. AMPLIADA 30H - 2238942' => 'EQ. AMPLIADA 30H - 2238942',
+    'EQ. PSICOSOCIAL 30H - 2238969' => 'EQ. PSICOSOCIAL 30H - 2238969',
+    'EQ. AMPLIADA CARLA MACHADO' => 'EQ. AMPLIADA CARLA MACHADO',
+    'EQ. PSICOSOCIAL 30H - 2238837' => 'EQ. PSICOSOCIAL 30H - 2238837',
+    'EQ. AMPLIADA 20H - 2238896' => 'EQ. AMPLIADA 20H - 2238896',
+    'EQ. PSICOSOCIAL 20H - 2238918' => 'EQ. PSICOSOCIAL 20H - 2238918',
+    'EQ. AMPLIADA EURICO JARDIM' => 'EQ. AMPLIADA EURICO JARDIM',
+    'EQ. PSICOSOCIAL 30H - 2238845' => 'EQ. PSICOSOCIAL 30H - 2238845',
+    'EQ. AMPLIADA 20H - 2238926' => 'EQ. AMPLIADA 20H - 2238926',
+    'EQ. PSICOSOCIAL 20H - 2238934' => 'EQ. PSICOSOCIAL 20H - 2238934',
+    'EQ. AMPLIADA ALFA' => 'EQ. AMPLIADA ALFA',
+    'EQ. PSICOSOCIAL 30H - 2238888' => 'EQ. PSICOSOCIAL 30H - 2238888',
+    'EQUIPE AMPLIADA 20H - 2502216' => 'EQUIPE AMPLIADA 20H - 2502216',
+    'ESF EQUIPE VILA DO BOA' => 'ESF EQUIPE VILA DO BOA',
+    'ESF DIAMANTE' => 'ESF DIAMANTE',
+    'ESF AMETISTA' => 'ESF AMETISTA',
+    'ESF SAFIRA' => 'ESF SAFIRA',
+    'ESF ESMERALDA' => 'ESF ESMERALDA',
+    'ESB 1 JARDINS MANGUEIRAL' => 'ESB 1 JARDINS MANGUEIRAL',
+    'ESB 2 JARDINS MANGUEIRAL' => 'ESB 2 JARDINS MANGUEIRAL',
+    'EMULTI RUBI' => 'EMULTI RUBI',
+    'ESF TORORO' => 'ESF TORORO',
   ];
 
   private const REQUIRED_FIELDS = [
@@ -90,7 +177,7 @@ final class Patient {
   public static function options(): array {
     return [
       'min_date' => self::MIN_DATE,
-      'max_date' => self::MAX_DATE,
+      'max_date' => self::maxDate(),
       'gender_options' => self::GENDER_OPTIONS,
       'race_options' => self::RACE_OPTIONS,
       'status_options' => self::STATUS_OPTIONS,
@@ -165,9 +252,6 @@ final class Patient {
 
   public static function validate(array $payload): array {
     $teamRef = self::normalizeOptionValue((string)($payload['team_reference'] ?? $payload['team_ref'] ?? ''), self::TEAM_OPTIONS);
-    if ($teamRef === '') {
-      $teamRef = 'sem_equipe';
-    }
 
     $data = [
       'first_cadh_date' => self::normalizeOptional($payload['attendance_date'] ?? $payload['first_cadh_date'] ?? null),
@@ -202,13 +286,13 @@ final class Patient {
     if ($data['first_cadh_date'] !== null && !self::isValidDate($data['first_cadh_date'])) {
       self::setError($errors, 'first_cadh_date', 'Informe uma data valida.');
     } elseif ($data['first_cadh_date'] !== null && !self::isDateInRange($data['first_cadh_date'])) {
-      self::setError($errors, 'first_cadh_date', 'Informe uma data entre 1900 e 2026.');
+      self::setError($errors, 'first_cadh_date', self::dateRangeErrorMessage());
     }
 
     if ($data['birth_date'] !== null && !self::isValidDate($data['birth_date'])) {
       self::setError($errors, 'birth_date', 'Informe uma data valida.');
     } elseif ($data['birth_date'] !== null && !self::isDateInRange($data['birth_date'])) {
-      self::setError($errors, 'birth_date', 'Informe uma data entre 1900 e 2026.');
+      self::setError($errors, 'birth_date', self::dateRangeErrorMessage());
     }
 
     if ($data['cpf'] !== null) {
@@ -526,11 +610,20 @@ final class Patient {
       return self::MIN_DATE;
     }
 
-    if ($date > self::MAX_DATE) {
-      return self::MAX_DATE;
+    $maxDate = self::maxDate();
+    if ($date > $maxDate) {
+      return $maxDate;
     }
 
     return $date;
+  }
+
+  private static function maxDate(): string {
+    return date('Y') . '-12-31';
+  }
+
+  private static function dateRangeErrorMessage(): string {
+    return 'Informe uma data entre 1900 e ' . date('Y') . '.';
   }
 
   private static function normalizeOptional($value): ?string {
@@ -546,6 +639,13 @@ final class Patient {
     $normalizedValue = self::normalizeOptionComparable($value);
     $aliases = [
       'amarelo' => 'amarela',
+      'esf equipe pdf iv' => '',
+      'esf equipe cir' => '',
+      'esf equipe pdf i' => '',
+      'esf equipe pdf ii' => '',
+      'esf equipe pdf 1' => '',
+      'esf equipe pdf 2' => '',
+      'esf equipe cdp' => '',
     ];
 
     if (isset($aliases[$normalizedValue])) {
@@ -603,7 +703,7 @@ final class Patient {
       return true;
     }
 
-    return $value >= self::MIN_DATE && $value <= self::MAX_DATE;
+    return $value >= self::MIN_DATE && $value <= self::maxDate();
   }
 
   private static function isValidCpf(string $digits): bool {
