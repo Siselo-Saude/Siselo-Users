@@ -27,12 +27,155 @@ final class Patient {
     'inativo' => 'Inativo',
   ];
 
-  private const TEAM_OPTIONS = [
+  private const LEGACY_TEAM_OPTIONS = [
     'sem_equipe' => 'Sem equipe',
     'safira' => 'Safira',
     'ametista' => 'Ametista',
     'esmeralda' => 'Esmeralda',
     'diamante' => 'Diamante',
+  ];
+
+  private const UBS_TEAM_GROUPS = [
+    [
+      'ubs' => 'UBS 01 PARANOA',
+      'teams' => [
+        'ESF EQUIPE 08 - BRANCA',
+        'ESF EQUIPE 09 - AMARELA',
+        'ESF EQUIPE 10 - AZUL',
+        'ESF EQUIPE 11 - VERDE',
+        'ESF EQUIPE 12 - ROSA',
+        'ESF EQUIPE 13 - LILAS',
+        'ESF EQUIPE 14 - MARROM',
+        'ESF EQUIPE 15 - DOURADA',
+        'ESF EQUIPE 16 - LARANJA',
+        'ESF EQUIPE 17 - PRATA',
+        'EMULTI AROEIRA',
+        'ECR MESTRE DAMIAO',
+      ],
+    ],
+    [
+      'ubs' => 'UBS 02 PARANOA - Quadra 18',
+      'teams' => [
+        'ESF EQUIPE 01 - QUADRA 18',
+        'ESF EQUIPE 02 - QUADRA 18',
+        'ESF EQUIPE 03 - QUADRA 18',
+      ],
+    ],
+    [
+      'ubs' => 'UBS 03 PARANOA - Paranoa Parque',
+      'teams' => [
+        'ESF EQUIPE 18 - BURITI',
+        'ESF EQUIPE 20 - JACARANDA',
+        'ESF EQUIPE 21 - IPE',
+        'ESF EQUIPE 22 - JEQUITIBA',
+        'ESF EQUIPE 23 - PEQUI',
+      ],
+    ],
+    ['ubs' => 'UBS 04 PARANOA - Jardim II', 'teams' => ['ESF EQUIPE 02 - JARDIM II', 'ESB JARDIM II']],
+    ['ubs' => 'UBS 05 PARANOA - Quebrada dos Neres', 'teams' => ['ESF EQUIPE QUEBRADA DOS NERES']],
+    ['ubs' => 'UBS 06 PARANOA - Cariru', 'teams' => ['ESF EQUIPE 04 - CARIRU', 'ESB CARIRU']],
+    ['ubs' => 'UBS 07 PARANOA - Cafe sem Troco', 'teams' => ['ESF EQUIPE CAFE SEM TROCO']],
+    ['ubs' => 'UBS 08 PARANOA - PADDF', 'teams' => ['ESF EQUIPE PADDF']],
+    [
+      'ubs' => 'UBS 01 ITAPOA',
+      'teams' => [
+        'ESF EQUIPE 07 - ROSA',
+        'ESF EQUIPE 08 - LARANJA',
+        'ESF EQUIPE 09 - LILAS',
+        'ESF EQUIPE 10 - CINZA',
+        'ESF EQUIPE 12 - VERDE',
+        'ESF EQUIPE 13 - VERMELHA',
+      ],
+    ],
+    ['ubs' => 'UBS 02 ITAPOA', 'teams' => ['ESF EQUIPE 01', 'ESF EQUIPE 02', 'ESF EQUIPE ESMERALDA']],
+    ['ubs' => 'UBS 03 ITAPOA', 'teams' => ['ESF EQUIPE 03', 'ESF EQUIPE 04', 'ESF EQUIPE 05']],
+    ['ubs' => 'UBS 04 ITAPOA', 'teams' => ['ESF EQUIPE RUBI']],
+    [
+      'ubs' => 'UBS 01 SAO SEBASTIAO',
+      'teams' => [
+        'ESF EQUIPE 04 - LARANJA',
+        'ESF EQUIPE 07 - LILAS',
+        'ESF EQUIPE 08 - ROSA',
+        'ESF EQUIPE 09 - VERDE',
+        'ESF EQUIPE 10 - VERMELHA',
+        'ESF DOURADA',
+      ],
+    ],
+    ['ubs' => 'UBS 02 SAO SEBASTIAO - T.R.E.', 'teams' => ['ESF EQUIPE T.R.E.']],
+    ['ubs' => 'UBS 03 SAO SEBASTIAO - Oeste', 'teams' => ['ESF EQUIPE 12 - OESTE 2', 'ESB OESTE SSB']],
+    ['ubs' => 'UBS 04 SAO SEBASTIAO - Morro Azul', 'teams' => ['ESF EQUIPE MORRO AZUL']],
+    ['ubs' => 'UBS 05 SAO SEBASTIAO - Nova Betania', 'teams' => ['ESF EQUIPE 01 - NOVA BETANIA', 'ESB NOVA BETANIA SSB']],
+    ['ubs' => 'UBS 06 SAO SEBASTIAO - Sao Francisco', 'teams' => ['ESF EQUIPE 16 - SAO FRANCISCO']],
+    ['ubs' => 'UBS 07 SAO SEBASTIAO - Morro da Cruz', 'teams' => ['ESF EQUIPE 02 - MORRO DA CRUZ']],
+    ['ubs' => 'UBS 08 SAO SEBASTIAO - Cavas de Baixo', 'teams' => ['ESF EQUIPE 03 - CAVAS DE BAIXO']],
+    [
+      'ubs' => 'UBS 09 SAO SEBASTIAO - Bosque',
+      'teams' => [
+        'ESF EQ 21 - BOSQUE 1',
+        'ESF EQUIPE 23 - VILA NOVA 2',
+        'ESB BOSQUE 1 SSB',
+        'EMULTI IPE AMARELO',
+      ],
+    ],
+    ['ubs' => 'UBS 10 SAO SEBASTIAO - Joao Candido', 'teams' => ['ESF EQUIPE 22 - JOAO CANDIDO']],
+    ['ubs' => 'UBS 11 SAO SEBASTIAO - Bosque 2', 'teams' => ['ESF EQUIPE 25 - BOSQUE 2']],
+    ['ubs' => 'UBS 12 SAO SEBASTIAO - Sao Jose', 'teams' => ['ESF EQUIPE 17 - SAO JOSE']],
+    [
+      'ubs' => 'UBS 14 SAO SEBASTIAO - PDF IV',
+      'teams' => [
+        'EQ. AMPLIADA 27 TIPO III CDP',
+        'EQ. PSICOSOCIAL 30H - 2238861',
+        'EQ. AMPLIADA ROSIMEIRE RODRIGUES',
+      ],
+    ],
+    [
+      'ubs' => 'UBS 15 SAO SEBASTIAO - CIR',
+      'teams' => [
+        'EQ. PSICOSOCIAL 30H - 2238853',
+        'EQ. AMPLIADA 30H - 2238942',
+        'EQ. PSICOSOCIAL 30H - 2238969',
+        'EQ. AMPLIADA CARLA MACHADO',
+      ],
+    ],
+    [
+      'ubs' => 'UBS 16 SAO SEBASTIAO - PDF 1',
+      'teams' => [
+        'EQ. PSICOSOCIAL 30H - 2238837',
+        'EQ. AMPLIADA 20H - 2238896',
+        'EQ. PSICOSOCIAL 20H - 2238918',
+        'EQ. AMPLIADA EURICO JARDIM',
+      ],
+    ],
+    [
+      'ubs' => 'UBS 17 SAO SEBASTIAO - PDF 2',
+      'teams' => [
+        'EQ. PSICOSOCIAL 30H - 2238845',
+        'EQ. AMPLIADA 20H - 2238926',
+        'EQ. PSICOSOCIAL 20H - 2238934',
+        'EQ. AMPLIADA ALFA',
+      ],
+    ],
+    ['ubs' => 'UBS 19 SAO SEBASTIAO - Vila do Boa', 'teams' => ['ESF EQUIPE VILA DO BOA']],
+    [
+      'ubs' => 'UBS 20 SAO SEBASTIAO CDP',
+      'teams' => [
+        'EQ. PSICOSOCIAL 30H - 2238888',
+        'EQUIPE AMPLIADA 20H - 2502216',
+      ],
+    ],
+    [
+      'ubs' => 'UBS 1 JARDINS MANGUEIRAL',
+      'teams' => [
+        'ESF DIAMANTE',
+        'ESF AMETISTA',
+        'ESF SAFIRA',
+        'ESF ESMERALDA',
+        'ESB 1 JARDINS MANGUEIRAL',
+        'ESB 2 JARDINS MANGUEIRAL',
+        'EMULTI RUBI',
+      ],
+    ],
+    ['ubs' => 'UBS 03 JARDIM BOTANICO', 'teams' => ['ESF TORORO']],
   ];
 
   private const REQUIRED_FIELDS = [
@@ -87,6 +230,28 @@ final class Patient {
     'team_ref' => 120,
   ];
 
+  private static function ubsOptions(): array {
+    $options = [];
+    foreach (self::UBS_TEAM_GROUPS as $group) {
+      $ubs = (string)$group['ubs'];
+      $options[$ubs] = $ubs;
+    }
+
+    return $options;
+  }
+
+  private static function teamOptions(): array {
+    $options = self::LEGACY_TEAM_OPTIONS;
+    foreach (self::UBS_TEAM_GROUPS as $group) {
+      foreach ($group['teams'] as $team) {
+        $team = (string)$team;
+        $options[$team] = $team;
+      }
+    }
+
+    return $options;
+  }
+
   public static function options(): array {
     return [
       'min_date' => self::MIN_DATE,
@@ -94,7 +259,8 @@ final class Patient {
       'gender_options' => self::GENDER_OPTIONS,
       'race_options' => self::RACE_OPTIONS,
       'status_options' => self::STATUS_OPTIONS,
-      'team_options' => self::TEAM_OPTIONS,
+      'ubs_options' => self::ubsOptions(),
+      'team_options' => self::teamOptions(),
     ];
   }
 
@@ -164,7 +330,7 @@ final class Patient {
   }
 
   public static function validate(array $payload): array {
-    $teamRef = self::normalizeOptionValue((string)($payload['team_reference'] ?? $payload['team_ref'] ?? ''), self::TEAM_OPTIONS);
+    $teamRef = self::normalizeOptionValue((string)($payload['team_reference'] ?? $payload['team_ref'] ?? ''), self::teamOptions());
     if ($teamRef === '') {
       $teamRef = 'sem_equipe';
     }
@@ -236,7 +402,7 @@ final class Patient {
       self::setError($errors, 'status', 'Selecione um status valido.');
     }
 
-    if ($data['team_ref'] !== '' && !array_key_exists($data['team_ref'], self::TEAM_OPTIONS)) {
+    if ($data['team_ref'] !== '' && !array_key_exists($data['team_ref'], self::teamOptions())) {
       self::setError($errors, 'team_ref', 'Selecione uma equipe valida.');
     }
 
@@ -580,6 +746,18 @@ final class Patient {
       'õ' => 'o',
       'ú' => 'u',
       'ç' => 'c',
+      'Á' => 'a',
+      'À' => 'a',
+      'Ã' => 'a',
+      'Â' => 'a',
+      'É' => 'e',
+      'Ê' => 'e',
+      'Í' => 'i',
+      'Ó' => 'o',
+      'Ô' => 'o',
+      'Õ' => 'o',
+      'Ú' => 'u',
+      'Ç' => 'c',
     ]);
     $normalized = preg_replace('/[^a-z0-9]+/', ' ', $normalized) ?? $normalized;
     return trim($normalized);
