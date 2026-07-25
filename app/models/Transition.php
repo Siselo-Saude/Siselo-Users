@@ -11,7 +11,7 @@ final class Transition {
 
   public static function list(PDO $pdo, string $query = '', ?int $patientId = null, bool $trash = false): array {
     $sql = '
-      SELECT t.*, p.full_name, p.cpf, p.team_ref
+      SELECT t.*, p.full_name, p.cpf, p.team_ref, p.care_status
       FROM transitions t
       JOIN patients p ON p.id = t.patient_id
       WHERE t.deleted_at IS ' . ($trash ? 'NOT NULL' : 'NULL') . ' AND p.deleted_at IS NULL

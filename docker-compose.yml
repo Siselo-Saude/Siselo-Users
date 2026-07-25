@@ -11,6 +11,7 @@ services:
       - ./database_patch_003.sql:/docker-entrypoint-initdb.d/03-database_patch_003.sql:ro
       - ./database_patch_004.sql:/docker-entrypoint-initdb.d/04-database_patch_004.sql:ro
       - ./database_patch_005.sql:/docker-entrypoint-initdb.d/05-database_patch_005.sql:ro
+      - ./database_patch_006.sql:/docker-entrypoint-initdb.d/06-database_patch_006.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
@@ -26,10 +27,11 @@ services:
       - ./database_patch_003.sql:/migrations/database_patch_003.sql:ro
       - ./database_patch_004.sql:/migrations/database_patch_004.sql:ro
       - ./database_patch_005.sql:/migrations/database_patch_005.sql:ro
+      - ./database_patch_006.sql:/migrations/database_patch_006.sql:ro
     entrypoint:
       - sh
       - -c
-      - mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_003.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_004.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_005.sql
+      - mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_003.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_004.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_005.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_006.sql
 
   users:
     build: .

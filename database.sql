@@ -95,12 +95,37 @@ CREATE TABLE patients (
   allergies TEXT NULL,
   chronic_conditions TEXT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'ativo',
+  risk_classification VARCHAR(30) NOT NULL DEFAULT 'alto_risco',
+  care_status VARCHAR(30) NOT NULL DEFAULT 'recebido',
+  finalization_reason VARCHAR(40) NULL,
+  finalization_notes TEXT NULL,
+  finalized_at DATETIME NULL,
+  finalized_by_user_id INT NULL,
   ubs_ref VARCHAR(120) NULL,
   team_ref VARCHAR(120) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
   deleted_at DATETIME NULL,
-  UNIQUE KEY uniq_cpf (cpf)
+  UNIQUE KEY uniq_cpf (cpf),
+  FOREIGN KEY (finalized_by_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE patient_appointments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT NOT NULL,
+  scheduled_at DATETIME NOT NULL,
+  specialty VARCHAR(80) NULL,
+  notes TEXT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'agendado',
+  created_by_user_id INT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL,
+  deleted_at DATETIME NULL,
+  INDEX idx_appointments_patient (patient_id),
+  INDEX idx_appointments_scheduled_at (scheduled_at),
+  INDEX idx_appointments_status (status),
+  FOREIGN KEY (patient_id) REFERENCES patients(id),
+  FOREIGN KEY (created_by_user_id) REFERENCES users(id)
 );
 
 -- =========================
@@ -117,7 +142,11 @@ INSERT INTO permissions (name, description) VALUES
 ('patients.create', 'Criar pacientes'),
 ('patients.update', 'Editar pacientes'),
 ('patients.delete', 'Apagar pacientes (soft delete)'),
-('patients.restore', 'Restaurar pacientes');
+('patients.restore', 'Restaurar pacientes'),
+('careflow.view', 'Visualizar fluxo assistencial'),
+('careflow.schedule', 'Agendar pacientes'),
+('careflow.update', 'Atualizar fluxo assistencial'),
+('careflow.finalize', 'Finalizar acompanhamento');
 
 -- Admin: tudo
 INSERT INTO role_permissions (role_id, permission_id)
@@ -126,13 +155,16 @@ SELECT r.id, p.id FROM roles r, permissions p WHERE r.name='admin';
 -- Alimentador: view/create/update (sem delete/restore/admin.manage)
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r
-JOIN permissions p ON p.name IN ('patients.view','patients.create','patients.update')
+JOIN permissions p ON p.name IN (
+  'patients.view','patients.create','patients.update',
+  'careflow.view','careflow.schedule','careflow.update','careflow.finalize'
+)
 WHERE r.name='alimentador';
 
 -- Visualizador: view
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r
-JOIN permissions p ON p.name IN ('patients.view')
+JOIN permissions p ON p.name IN ('patients.view','careflow.view')
 WHERE r.name='visualizador';
 
 INSERT INTO users (name, email, password_hash, is_active, is_approved, approved_at, must_change_password) VALUES
