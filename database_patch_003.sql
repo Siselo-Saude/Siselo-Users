@@ -241,11 +241,11 @@ INSERT IGNORE INTO permissions (name, description) VALUES
 ('encounters.update', 'Editar atendimentos'),
 ('encounters.delete', 'Apagar atendimentos (soft delete)'),
 ('encounters.restore', 'Restaurar atendimentos'),
-('transitions.view', 'Visualizar transições'),
-('transitions.create', 'Criar transições'),
-('transitions.update', 'Editar transições'),
-('transitions.delete', 'Apagar transições (soft delete)'),
-('transitions.restore', 'Restaurar transições');
+('transitions.view', 'Visualizar encaminhamentos'),
+('transitions.create', 'Criar encaminhamentos'),
+('transitions.update', 'Editar encaminhamentos'),
+('transitions.delete', 'Apagar encaminhamentos (soft delete)'),
+('transitions.restore', 'Restaurar encaminhamentos');
 
 -- admin: tudo
 INSERT IGNORE INTO role_permissions (role_id, permission_id)

@@ -23,7 +23,7 @@ if ($editing) {
   $st = $pdo->prepare("SELECT * FROM transitions WHERE id=:id AND deleted_at IS NULL");
   $st->execute([':id'=>$id]);
   $row = $st->fetch();
-  if (!$row) { echo "Transição não encontrada."; exit; }
+  if (!$row) { echo "Encaminhamento não encontrado."; exit; }
 } else {
   require_permission($pdo, 'transitions.create');
   $row = [
@@ -99,9 +99,9 @@ require __DIR__ . '/../../app/views/layout/header.php';
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title><?= $editing ? 'Editar' : 'Nova' ?> Transição</title></head>
+<head><meta charset="utf-8"><title><?= $editing ? 'Editar' : 'Novo' ?> Encaminhamento</title></head>
 <body>
-  <h1><?= $editing ? 'Editar' : 'Nova' ?> Transição</h1>
+  <h1><?= $editing ? 'Editar' : 'Novo' ?> Encaminhamento</h1>
   <?php if (!empty($error)) echo "<p style='color:red'>".h($error)."</p>"; ?>
 
   <form method="post">

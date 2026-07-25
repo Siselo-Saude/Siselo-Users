@@ -39,9 +39,9 @@ require __DIR__ . '/../../app/views/layout/header.php';
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Transições</title></head>
+<head><meta charset="utf-8"><title>Encaminhamentos</title></head>
 <body>
-  <h1>Transições do Cuidado</h1>
+  <h1>Encaminhamentos do Cuidado</h1>
 
   <form method="get">
     <input name="q" value="<?= h($q) ?>" placeholder="Buscar paciente/CPF/equipe/status/serviço">
@@ -50,7 +50,7 @@ require __DIR__ . '/../../app/views/layout/header.php';
 
   <p>
     <?php if (can($pdo, 'transitions.create')): ?>
-      <a href="/transitions/form.php">+ Nova transição</a>
+      <a href="/transitions/form.php">+ Novo encaminhamento</a>
     <?php endif; ?>
     <?php if (can($pdo, 'transitions.restore')): ?>
       | <a href="/transitions/trash.php">Lixeira</a>
@@ -81,7 +81,7 @@ require __DIR__ . '/../../app/views/layout/header.php';
             <form method="post" action="/transitions/soft_delete.php" style="display:inline">
               <?= csrf_field() ?>
               <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-              <button type="submit" onclick="return confirm('Apagar transição? (soft delete)')">Apagar</button>
+              <button type="submit" onclick="return confirm('Apagar encaminhamento? (soft delete)')">Apagar</button>
             </form>
           <?php endif; ?>
         </td>

@@ -626,7 +626,13 @@ final class Patient {
   }
 
   public static function encountersFor(PDO $pdo, int $patientId): array {
-    $stmt = $pdo->prepare('SELECT * FROM encounters WHERE patient_id = :patient_id AND deleted_at IS NULL ORDER BY encounter_date DESC, id DESC');
+    $stmt = $pdo->prepare('
+      SELECT e.*, u.name AS professional_name
+      FROM encounters e
+      LEFT JOIN users u ON u.id = e.professional_user_id
+      WHERE e.patient_id = :patient_id AND e.deleted_at IS NULL
+      ORDER BY e.encounter_date DESC, e.id DESC
+    ');
     $stmt->execute([':patient_id' => $patientId]);
     return $stmt->fetchAll();
   }

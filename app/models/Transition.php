@@ -83,7 +83,7 @@ final class Transition {
           'row' => null,
           'patients' => self::patientOptions($pdo),
           'statuses' => self::statuses(),
-          'error' => 'Transicao nao encontrada.',
+          'error' => 'Encaminhamento nao encontrado.',
         ];
       }
     } else {
@@ -138,7 +138,7 @@ final class Transition {
     if ($editing) {
       $before = self::find($pdo, $id);
       if ($before === null) {
-        throw new RuntimeException('Transicao nao encontrada.');
+        throw new RuntimeException('Encaminhamento nao encontrado.');
       }
 
       $stmt = $pdo->prepare('

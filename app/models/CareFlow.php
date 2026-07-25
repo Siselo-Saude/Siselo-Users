@@ -64,6 +64,14 @@ final class CareFlow {
           LIMIT 1
         )
       WHERE p.deleted_at IS NULL
+        AND EXISTS (
+          SELECT 1
+          FROM transitions referral
+          WHERE referral.patient_id = p.id
+            AND referral.deleted_at IS NULL
+            AND UPPER(TRIM(referral.to_service)) LIKE \'CADH%\'
+            AND referral.status <> \'cancelada\'
+        )
     ';
     $params = [];
 
@@ -101,6 +109,98 @@ final class CareFlow {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     return array_map([self::class, 'serializeRow'], $stmt->fetchAll());
+  }
+
+  public static function refer(PDO $pdo, array $payload, int $actorUserId): array {
+    $patientId = (int)($payload['patient_id'] ?? 0);
+    $risk = trim((string)($payload['risk_classification'] ?? ''));
+
+    if ($patientId <= 0) {
+      throw new InvalidArgumentException('Selecione um paciente.');
+    }
+    if (!array_key_exists($risk, self::RISK_OPTIONS)) {
+      throw new InvalidArgumentException('Selecione uma classificacao de risco valida.');
+    }
+
+    $before = self::findPatient($pdo, $patientId);
+    if ($before === null || (string)($before['care_status'] ?? '') === 'finalizado') {
+      throw new RuntimeException('Paciente nao encontrado ou ja finalizado.');
+    }
+
+    $pdo->beginTransaction();
+    try {
+      $pdo->prepare("
+        UPDATE patients
+        SET risk_classification = :risk,
+            care_status = 'recebido',
+            first_cadh_date = COALESCE(first_cadh_date, CURDATE()),
+            updated_at = NOW()
+        WHERE id = :id AND deleted_at IS NULL
+      ")->execute([
+        ':risk' => $risk,
+        ':id' => $patientId,
+      ]);
+
+      $activeReferral = $pdo->prepare("
+        SELECT *
+        FROM transitions
+        WHERE patient_id = :patient_id
+          AND deleted_at IS NULL
+          AND UPPER(TRIM(to_service)) LIKE 'CADH%'
+          AND status IN ('pendente', 'em_andamento')
+        ORDER BY id DESC
+        LIMIT 1
+      ");
+      $activeReferral->execute([':patient_id' => $patientId]);
+      $transition = $activeReferral->fetch();
+
+      if (!$transition) {
+        $fromService = trim((string)($before['ubs_ref'] ?? ''));
+        $fromService = $fromService !== '' ? $fromService : 'UBS';
+        $notes = 'Encaminhamento da UBS para o CADH. Classificacao: ' . self::RISK_OPTIONS[$risk] . '.';
+        $insert = $pdo->prepare("
+          INSERT INTO transitions
+            (patient_id, transition_date, from_service, to_service, status, notes, created_by_user_id)
+          VALUES
+            (:patient_id, CURDATE(), :from_service, 'CADH', 'pendente', :notes, :user_id)
+        ");
+        $insert->execute([
+          ':patient_id' => $patientId,
+          ':from_service' => $fromService,
+          ':notes' => $notes,
+          ':user_id' => $actorUserId,
+        ]);
+        $transitionId = (int)$pdo->lastInsertId();
+        $transitionQuery = $pdo->prepare('SELECT * FROM transitions WHERE id = :id LIMIT 1');
+        $transitionQuery->execute([':id' => $transitionId]);
+        $transition = $transitionQuery->fetch() ?: [];
+        Audit::log($pdo, $actorUserId, 'create', 'transitions', $transitionId, null, $transition);
+      }
+
+      $patient = self::findPatient($pdo, $patientId) ?? [];
+      Audit::log($pdo, $actorUserId, 'refer', 'patients', $patientId, $before, [
+        'risk_classification' => $risk,
+        'care_status' => 'recebido',
+      ]);
+      $pdo->commit();
+
+      if (isset($transition['id'])) {
+        $transition['id'] = (int)$transition['id'];
+      }
+      if (isset($transition['patient_id'])) {
+        $transition['patient_id'] = (int)$transition['patient_id'];
+      }
+
+      return [
+        'patient' => $patient,
+        'transition' => $transition,
+      ];
+    } catch (Throwable $error) {
+      if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+      }
+      throw $error;
+    }
   }
 
   public static function schedule(PDO $pdo, array $payload, int $actorUserId): array {

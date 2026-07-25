@@ -25,7 +25,7 @@ require __DIR__ . '/../app/views/layout/header.php';
   </p>
 | <a href="/care_plans/list.php">Planos de Cuidado</a>
 | <a href="/encounters/list.php">Atendimentos</a>
-| <a href="/transitions/list.php">Transições</a>
+| <a href="/transitions/list.php">Encaminhamentos</a>
 <?php require __DIR__ . '/../app/views/layout/footer.php'; ?>
 </body>
 </html>
