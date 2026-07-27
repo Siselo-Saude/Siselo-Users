@@ -51,8 +51,19 @@ final class CareFlow {
         a.id AS appointment_id,
         a.scheduled_at,
         a.specialty AS appointment_specialty,
+        a.modality AS appointment_modality,
+        a.professional AS appointment_professional,
+        a.team AS appointment_team,
+        a.priority AS appointment_priority,
         a.notes AS appointment_notes,
-        a.status AS appointment_status
+        a.status AS appointment_status,
+        referral.id AS referral_id,
+        referral.transition_date AS referral_date,
+        referral.from_service AS referral_from_service,
+        referral.to_service AS referral_to_service,
+        referral.status AS referral_status,
+        referral.notes AS referral_notes,
+        referral.received_at AS referral_received_at
       FROM patients p
       LEFT JOIN patient_appointments a
         ON a.id = (
@@ -63,15 +74,19 @@ final class CareFlow {
           ORDER BY pa.scheduled_at DESC, pa.id DESC
           LIMIT 1
         )
-      WHERE p.deleted_at IS NULL
-        AND EXISTS (
-          SELECT 1
-          FROM transitions referral
-          WHERE referral.patient_id = p.id
-            AND referral.deleted_at IS NULL
-            AND UPPER(TRIM(referral.to_service)) LIKE \'CADH%\'
-            AND referral.status <> \'cancelada\'
+      LEFT JOIN transitions referral
+        ON referral.id = (
+          SELECT candidate.id
+          FROM transitions candidate
+          WHERE candidate.patient_id = p.id
+            AND candidate.deleted_at IS NULL
+            AND UPPER(TRIM(candidate.to_service)) LIKE \'CADH%\'
+            AND candidate.status <> \'cancelada\'
+          ORDER BY candidate.id DESC
+          LIMIT 1
         )
+      WHERE p.deleted_at IS NULL
+        AND referral.id IS NOT NULL
     ';
     $params = [];
 
@@ -207,6 +222,10 @@ final class CareFlow {
     $patientId = (int)($payload['patient_id'] ?? 0);
     $scheduledAt = self::normalizeDateTime((string)($payload['scheduled_at'] ?? ''));
     $specialty = self::singleLine((string)($payload['specialty'] ?? ''));
+    $modality = self::singleLine((string)($payload['modality'] ?? 'Presencial'));
+    $professional = self::singleLine((string)($payload['professional'] ?? ''));
+    $team = self::singleLine((string)($payload['team'] ?? ''));
+    $priority = trim((string)($payload['priority'] ?? 'nao'));
     $notes = trim((string)($payload['notes'] ?? ''));
 
     if ($patientId <= 0) {
@@ -215,20 +234,30 @@ final class CareFlow {
     if ($scheduledAt === null) {
       throw new InvalidArgumentException('Informe uma data e hora válidas.');
     }
+    if (!in_array($modality, ['Presencial', 'Teleatendimento'], true)) {
+      throw new InvalidArgumentException('Modalidade de agendamento inválida.');
+    }
+    if (!in_array($priority, ['nao', 'sim'], true)) {
+      throw new InvalidArgumentException('Prioridade de agendamento inválida.');
+    }
     self::assertActivePatient($pdo, $patientId);
 
     $pdo->beginTransaction();
     try {
       $insert = $pdo->prepare('
         INSERT INTO patient_appointments
-          (patient_id, scheduled_at, specialty, notes, status, created_by_user_id)
+          (patient_id, scheduled_at, specialty, modality, professional, team, priority, notes, status, created_by_user_id)
         VALUES
-          (:patient_id, :scheduled_at, :specialty, :notes, :status, :user_id)
+          (:patient_id, :scheduled_at, :specialty, :modality, :professional, :team, :priority, :notes, :status, :user_id)
       ');
       $insert->execute([
         ':patient_id' => $patientId,
         ':scheduled_at' => $scheduledAt,
         ':specialty' => $specialty !== '' ? $specialty : null,
+        ':modality' => $modality,
+        ':professional' => $professional !== '' ? $professional : null,
+        ':team' => $team !== '' ? $team : null,
+        ':priority' => $priority,
         ':notes' => $notes !== '' ? $notes : null,
         ':status' => 'agendado',
         ':user_id' => $actorUserId,
@@ -244,10 +273,69 @@ final class CareFlow {
       Audit::log($pdo, $actorUserId, 'create', 'patient_appointments', $appointmentId, null, [
         'patient_id' => $patientId,
         'scheduled_at' => $scheduledAt,
+        'specialty' => $specialty,
+        'modality' => $modality,
+        'professional' => $professional,
+        'team' => $team,
+        'priority' => $priority,
         'status' => 'agendado',
       ]);
       $pdo->commit();
       return self::findAppointment($pdo, $appointmentId) ?? [];
+    } catch (Throwable $error) {
+      if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+      }
+      throw $error;
+    }
+  }
+
+  public static function confirmReceipt(PDO $pdo, array $payload, int $actorUserId): array {
+    $patientId = (int)($payload['patient_id'] ?? 0);
+    if ($patientId <= 0) {
+      throw new InvalidArgumentException('Selecione um encaminhamento.');
+    }
+
+    $before = self::findCadhReferral($pdo, $patientId);
+    if ($before === null) {
+      throw new RuntimeException('Encaminhamento para o CADH não encontrado.');
+    }
+    if (!empty($before['received_at'])) {
+      return self::serializeRow($before);
+    }
+
+    $pdo->beginTransaction();
+    try {
+      $stmt = $pdo->prepare("
+        UPDATE transitions
+        SET status = CASE WHEN status = 'pendente' THEN 'em_andamento' ELSE status END,
+            received_at = NOW(),
+            updated_at = NOW()
+        WHERE id = :id
+          AND deleted_at IS NULL
+          AND received_at IS NULL
+      ");
+      $stmt->execute([':id' => (int)$before['id']]);
+
+      $referral = self::findCadhReferral($pdo, $patientId);
+      if ($referral === null) {
+        throw new RuntimeException('Encaminhamento para o CADH não encontrado.');
+      }
+
+      if ($stmt->rowCount() > 0) {
+        Audit::log(
+          $pdo,
+          $actorUserId,
+          'receive',
+          'transitions',
+          (int)$before['id'],
+          $before,
+          $referral
+        );
+      }
+
+      $pdo->commit();
+      return self::serializeRow($referral);
     } catch (Throwable $error) {
       if ($pdo->inTransaction()) {
         $pdo->rollBack();
@@ -354,6 +442,22 @@ final class CareFlow {
     }
   }
 
+  private static function findCadhReferral(PDO $pdo, int $patientId): ?array {
+    $stmt = $pdo->prepare("
+      SELECT *
+      FROM transitions
+      WHERE patient_id = :patient_id
+        AND deleted_at IS NULL
+        AND UPPER(TRIM(to_service)) LIKE 'CADH%'
+        AND status <> 'cancelada'
+      ORDER BY id DESC
+      LIMIT 1
+    ");
+    $stmt->execute([':patient_id' => $patientId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+  }
+
   private static function findPatient(PDO $pdo, int $patientId): ?array {
     $stmt = $pdo->prepare('SELECT * FROM patients WHERE id = :id AND deleted_at IS NULL LIMIT 1');
     $stmt->execute([':id' => $patientId]);
@@ -375,7 +479,7 @@ final class CareFlow {
   }
 
   private static function serializeRow(array $row): array {
-    foreach (['id', 'patient_id', 'appointment_id', 'finalized_by_user_id'] as $field) {
+    foreach (['id', 'patient_id', 'appointment_id', 'referral_id', 'finalized_by_user_id'] as $field) {
       if (array_key_exists($field, $row) && $row[$field] !== null) {
         $row[$field] = (int)$row[$field];
       }

@@ -27,6 +27,10 @@ final class CareFlowController {
         api_require_permission($pdo, 'careflow.update');
         api_success(CareFlow::refer($pdo, $input, $actorUserId), 201);
       }
+      if ($action === 'confirm_receipt') {
+        api_require_permission($pdo, 'careflow.update');
+        api_success(['referral' => CareFlow::confirmReceipt($pdo, $input, $actorUserId)]);
+      }
       if ($action === 'schedule') {
         api_require_permission($pdo, 'careflow.schedule');
         api_success(['appointment' => CareFlow::schedule($pdo, $input, $actorUserId)], 201);
