@@ -6,13 +6,16 @@ require_once __DIR__ . '/../models/CareFlow.php';
 final class CareFlowController {
   public static function list(PDO $pdo): never {
     api_require_permission($pdo, 'careflow.view');
+    $appointmentId = (int)(api_query_param('appointment_id', '0') ?? '0');
     api_success([
       'rows' => CareFlow::list($pdo, [
         'q' => api_query_param('q', ''),
         'risk' => api_query_param('risk', ''),
         'care_status' => api_query_param('care_status', 'active'),
+        'appointment_scope' => api_query_param('appointment_scope', 'latest'),
       ]),
       'options' => CareFlow::options(),
+      'appointment' => $appointmentId > 0 ? CareFlow::appointment($pdo, $appointmentId) : null,
     ]);
   }
 
@@ -38,6 +41,10 @@ final class CareFlowController {
       if ($action === 'move') {
         api_require_permission($pdo, 'careflow.update');
         api_success(['appointment' => CareFlow::move($pdo, $input, $actorUserId)]);
+      }
+      if ($action === 'mark_not_performed') {
+        api_require_permission($pdo, 'careflow.update');
+        api_success(['appointment' => CareFlow::markNotPerformed($pdo, $input, $actorUserId)]);
       }
       if ($action === 'finalize') {
         api_require_permission($pdo, 'careflow.finalize');

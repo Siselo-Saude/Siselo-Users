@@ -4,6 +4,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../services/Audit.php';
 
 final class CareFlow {
+  private const APPLICATION_TIMEZONE = 'America/Sao_Paulo';
+
   private const RISK_OPTIONS = [
     'alto_risco' => 'Alto Risco',
     'muito_alto_risco' => 'Muito Alto Risco',
@@ -24,6 +26,33 @@ final class CareFlow {
     'ausente' => 'Ausente',
   ];
 
+  private const APPOINTMENT_OUTCOME_REASONS = [
+    'patient_absent' => [
+      'label' => 'Ausência do paciente',
+      'status' => 'ausente',
+    ],
+    'professional_absent' => [
+      'label' => 'Ausência do profissional',
+      'status' => 'pendente',
+    ],
+    'internal_cancellation' => [
+      'label' => 'Cancelamento interno',
+      'status' => 'pendente',
+    ],
+    'unit_impediment' => [
+      'label' => 'Impedimento da unidade',
+      'status' => 'pendente',
+    ],
+    'other' => [
+      'label' => 'Outro impedimento',
+      'status' => 'pendente',
+    ],
+  ];
+
+  private const SYSTEM_APPOINTMENT_OUTCOME_LABELS = [
+    'overdue' => 'Horário da consulta expirado',
+  ];
+
   private const FINALIZATION_REASONS = [
     'obito' => 'Óbito',
     'ausencia' => 'Ausência',
@@ -36,6 +65,10 @@ final class CareFlow {
       'risk_options' => self::RISK_OPTIONS,
       'care_status_options' => self::CARE_STATUS_OPTIONS,
       'appointment_status_options' => self::APPOINTMENT_STATUS_OPTIONS,
+      'appointment_outcome_reasons' => array_map(
+        static fn(array $reason): string => $reason['label'],
+        self::APPOINTMENT_OUTCOME_REASONS
+      ),
       'finalization_reasons' => self::FINALIZATION_REASONS,
     ];
   }
@@ -44,6 +77,27 @@ final class CareFlow {
     $query = trim((string)($filters['q'] ?? ''));
     $risk = trim((string)($filters['risk'] ?? ''));
     $careStatus = trim((string)($filters['care_status'] ?? 'active'));
+    $appointmentScope = trim((string)($filters['appointment_scope'] ?? 'latest'));
+    if ($appointmentScope === 'all') {
+      self::expireOverdueAppointments($pdo);
+    }
+    $appointmentJoin = $appointmentScope === 'all'
+      ? '
+        LEFT JOIN patient_appointments a
+          ON a.patient_id = p.id
+         AND a.deleted_at IS NULL
+      '
+      : '
+        LEFT JOIN patient_appointments a
+          ON a.id = (
+            SELECT pa.id
+            FROM patient_appointments pa
+            WHERE pa.patient_id = p.id
+              AND pa.deleted_at IS NULL
+            ORDER BY pa.scheduled_at DESC, pa.id DESC
+            LIMIT 1
+          )
+      ';
 
     $sql = '
       SELECT
@@ -57,6 +111,10 @@ final class CareFlow {
         a.priority AS appointment_priority,
         a.notes AS appointment_notes,
         a.status AS appointment_status,
+        a.outcome_reason AS appointment_outcome_reason,
+        a.outcome_notes AS appointment_outcome_notes,
+        a.resolved_at AS appointment_resolved_at,
+        a.resolved_by_user_id AS appointment_resolved_by_user_id,
         referral.id AS referral_id,
         referral.transition_date AS referral_date,
         referral.from_service AS referral_from_service,
@@ -65,15 +123,7 @@ final class CareFlow {
         referral.notes AS referral_notes,
         referral.received_at AS referral_received_at
       FROM patients p
-      LEFT JOIN patient_appointments a
-        ON a.id = (
-          SELECT pa.id
-          FROM patient_appointments pa
-          WHERE pa.patient_id = p.id
-            AND pa.deleted_at IS NULL
-          ORDER BY pa.scheduled_at DESC, pa.id DESC
-          LIMIT 1
-        )
+      ' . $appointmentJoin . '
       LEFT JOIN transitions referral
         ON referral.id = (
           SELECT candidate.id
@@ -110,16 +160,29 @@ final class CareFlow {
       $params[':risk'] = $risk;
     }
 
-    $sql .= "
-      ORDER BY
-        CASE p.risk_classification
-          WHEN 'muito_alto_risco' THEN 0
-          WHEN 'alto_risco' THEN 1
-          ELSE 2
-        END,
-        p.full_name ASC
-      LIMIT 500
-    ";
+    $sql .= $appointmentScope === 'all'
+      ? "
+        ORDER BY
+          CASE p.risk_classification
+            WHEN 'muito_alto_risco' THEN 0
+            WHEN 'alto_risco' THEN 1
+            ELSE 2
+          END,
+          COALESCE(a.scheduled_at, '9999-12-31 23:59:59') ASC,
+          p.full_name ASC,
+          a.id ASC
+        LIMIT 500
+      "
+      : "
+        ORDER BY
+          CASE p.risk_classification
+            WHEN 'muito_alto_risco' THEN 0
+            WHEN 'alto_risco' THEN 1
+            ELSE 2
+          END,
+          p.full_name ASC
+        LIMIT 500
+      ";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -367,6 +430,81 @@ final class CareFlow {
     return self::findAppointment($pdo, $appointmentId) ?? [];
   }
 
+  public static function appointment(PDO $pdo, int $appointmentId): ?array {
+    if ($appointmentId <= 0) {
+      return null;
+    }
+
+    return self::findAppointment($pdo, $appointmentId);
+  }
+
+  public static function markNotPerformed(PDO $pdo, array $payload, int $actorUserId): array {
+    $appointmentId = (int)($payload['appointment_id'] ?? 0);
+    $reason = trim((string)($payload['reason'] ?? ''));
+    $notes = trim((string)($payload['notes'] ?? ''));
+
+    if ($appointmentId <= 0 || !array_key_exists($reason, self::APPOINTMENT_OUTCOME_REASONS)) {
+      throw new InvalidArgumentException('Agendamento ou motivo inválido.');
+    }
+    if ($reason === 'other' && $notes === '') {
+      throw new InvalidArgumentException('Descreva o impedimento ocorrido.');
+    }
+
+    $pdo->beginTransaction();
+    try {
+      $lock = $pdo->prepare('
+        SELECT a.*, p.full_name, p.cpf, p.risk_classification, p.care_status
+        FROM patient_appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE a.id = :id
+          AND a.deleted_at IS NULL
+          AND p.deleted_at IS NULL
+        LIMIT 1
+        FOR UPDATE
+      ');
+      $lock->execute([':id' => $appointmentId]);
+      $before = $lock->fetch();
+      if (!$before) {
+        throw new RuntimeException('Agendamento não encontrado.');
+      }
+      if ((string)$before['status'] !== 'agendado') {
+        throw new RuntimeException('Este agendamento já possui um desfecho registrado.');
+      }
+
+      $status = self::APPOINTMENT_OUTCOME_REASONS[$reason]['status'];
+      $update = $pdo->prepare('
+        UPDATE patient_appointments
+        SET status = :status,
+            outcome_reason = :reason,
+            outcome_notes = :notes,
+            resolved_at = NOW(),
+            resolved_by_user_id = :user_id,
+            updated_at = NOW()
+        WHERE id = :id
+      ');
+      $update->execute([
+        ':status' => $status,
+        ':reason' => $reason,
+        ':notes' => $notes !== '' ? $notes : null,
+        ':user_id' => $actorUserId,
+        ':id' => $appointmentId,
+      ]);
+
+      Audit::log($pdo, $actorUserId, 'resolve', 'patient_appointments', $appointmentId, $before, [
+        'status' => $status,
+        'outcome_reason' => $reason,
+        'outcome_notes' => $notes !== '' ? $notes : null,
+      ]);
+      $pdo->commit();
+      return self::findAppointment($pdo, $appointmentId) ?? [];
+    } catch (Throwable $error) {
+      if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+      }
+      throw $error;
+    }
+  }
+
   public static function finalize(PDO $pdo, array $payload, int $actorUserId): array {
     $patientId = (int)($payload['patient_id'] ?? 0);
     $reason = trim((string)($payload['reason'] ?? ''));
@@ -467,9 +605,18 @@ final class CareFlow {
 
   private static function findAppointment(PDO $pdo, int $appointmentId): ?array {
     $stmt = $pdo->prepare('
-      SELECT a.*, p.full_name, p.cpf, p.risk_classification, p.care_status
+      SELECT
+        a.*,
+        p.full_name,
+        p.cpf,
+        p.ubs_ref,
+        p.team_ref,
+        p.risk_classification,
+        p.care_status,
+        resolver.name AS resolved_by_name
       FROM patient_appointments a
       JOIN patients p ON p.id = a.patient_id
+      LEFT JOIN users resolver ON resolver.id = a.resolved_by_user_id
       WHERE a.id = :id AND a.deleted_at IS NULL
       LIMIT 1
     ');
@@ -478,8 +625,88 @@ final class CareFlow {
     return $row ? self::serializeRow($row) : null;
   }
 
+  private static function expireOverdueAppointments(PDO $pdo): void {
+    $now = (new DateTimeImmutable('now', new DateTimeZone(self::APPLICATION_TIMEZONE)))
+      ->format('Y-m-d H:i:s');
+    $ownsTransaction = !$pdo->inTransaction();
+
+    if ($ownsTransaction) {
+      $pdo->beginTransaction();
+    }
+
+    try {
+      $select = $pdo->prepare("
+        SELECT a.*
+        FROM patient_appointments a
+        WHERE a.deleted_at IS NULL
+          AND a.status IN ('agendado', 'aguardando', 'em_atendimento')
+          AND a.scheduled_at < :current_time
+          AND NOT EXISTS (
+            SELECT 1
+            FROM encounters e
+            WHERE e.appointment_id = a.id
+              AND e.deleted_at IS NULL
+          )
+        FOR UPDATE
+      ");
+      $select->execute([':current_time' => $now]);
+      $appointments = $select->fetchAll();
+
+      if ($appointments) {
+        $update = $pdo->prepare("
+          UPDATE patient_appointments
+          SET status = 'pendente',
+              outcome_reason = 'overdue',
+              outcome_notes = COALESCE(
+                NULLIF(TRIM(outcome_notes), ''),
+                'Consulta não concluída até a data e o horário agendados.'
+              ),
+              resolved_at = :resolved_at,
+              resolved_by_user_id = NULL,
+              updated_at = :updated_at
+          WHERE id = :id
+            AND deleted_at IS NULL
+            AND status IN ('agendado', 'aguardando', 'em_atendimento')
+        ");
+
+        foreach ($appointments as $appointment) {
+          $appointmentId = (int)$appointment['id'];
+          $update->execute([
+            ':resolved_at' => $now,
+            ':updated_at' => $now,
+            ':id' => $appointmentId,
+          ]);
+          if ($update->rowCount() > 0) {
+            Audit::log($pdo, null, 'expire', 'patient_appointments', $appointmentId, $appointment, [
+              'status' => 'pendente',
+              'outcome_reason' => 'overdue',
+              'resolved_at' => $now,
+            ]);
+          }
+        }
+      }
+
+      if ($ownsTransaction) {
+        $pdo->commit();
+      }
+    } catch (Throwable $error) {
+      if ($ownsTransaction && $pdo->inTransaction()) {
+        $pdo->rollBack();
+      }
+      throw $error;
+    }
+  }
+
   private static function serializeRow(array $row): array {
-    foreach (['id', 'patient_id', 'appointment_id', 'referral_id', 'finalized_by_user_id'] as $field) {
+    foreach ([
+      'id',
+      'patient_id',
+      'appointment_id',
+      'referral_id',
+      'finalized_by_user_id',
+      'resolved_by_user_id',
+      'appointment_resolved_by_user_id',
+    ] as $field) {
       if (array_key_exists($field, $row) && $row[$field] !== null) {
         $row[$field] = (int)$row[$field];
       }
@@ -488,10 +715,14 @@ final class CareFlow {
     $risk = (string)($row['risk_classification'] ?? 'alto_risco');
     $careStatus = (string)($row['care_status'] ?? 'recebido');
     $appointmentStatus = (string)($row['appointment_status'] ?? $row['status'] ?? '');
+    $appointmentOutcome = (string)($row['appointment_outcome_reason'] ?? $row['outcome_reason'] ?? '');
     $reason = (string)($row['finalization_reason'] ?? '');
     $row['risk_label'] = self::RISK_OPTIONS[$risk] ?? 'Alto Risco';
     $row['care_status_label'] = self::CARE_STATUS_OPTIONS[$careStatus] ?? 'Recebido da UBS';
     $row['appointment_status_label'] = self::APPOINTMENT_STATUS_OPTIONS[$appointmentStatus] ?? '';
+    $row['appointment_outcome_reason_label'] = self::APPOINTMENT_OUTCOME_REASONS[$appointmentOutcome]['label']
+      ?? self::SYSTEM_APPOINTMENT_OUTCOME_LABELS[$appointmentOutcome]
+      ?? '';
     $row['finalization_reason_label'] = self::FINALIZATION_REASONS[$reason] ?? '';
     unset($row['health_insurance'], $row['blood_type']);
     return $row;
