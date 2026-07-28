@@ -5,6 +5,12 @@ require_once __DIR__ . '/CarePlan.php';
 require_once __DIR__ . '/../services/Audit.php';
 
 final class Encounter {
+  private const RECORD_TYPES = [
+    'diagnostico' => 'Diagnóstico',
+    'exame' => 'Exame',
+    'consulta' => 'Consulta',
+  ];
+
   public static function list(PDO $pdo, string $query = '', ?int $patientId = null, bool $trash = false): array {
     $sql = '
       SELECT e.*, p.full_name, p.cpf, p.team_ref
@@ -84,6 +90,7 @@ final class Encounter {
         'patient_id' => $prefPatientId ?: '',
         'encounter_date' => date('Y-m-d'),
         'specialty' => '',
+        'record_type' => 'consulta',
         'summary' => '',
       ];
     }
@@ -101,6 +108,7 @@ final class Encounter {
       'patient_id' => (int)($payload['patient_id'] ?? 0),
       'encounter_date' => trim((string)($payload['encounter_date'] ?? '')),
       'specialty' => trim((string)($payload['specialty'] ?? '')),
+      'record_type' => trim((string)($payload['record_type'] ?? 'consulta')),
       'summary' => trim((string)($payload['summary'] ?? '')),
     ];
 
@@ -113,6 +121,9 @@ final class Encounter {
     }
     if ($data['specialty'] === '') {
       $errors['specialty'] = 'Especialidade obrigatoria.';
+    }
+    if (!array_key_exists($data['record_type'], self::RECORD_TYPES)) {
+      $errors['record_type'] = 'Tipo de registro invalido.';
     }
 
     return ['data' => $data, 'errors' => $errors];
@@ -129,13 +140,14 @@ final class Encounter {
 
       $stmt = $pdo->prepare('
         UPDATE encounters
-        SET patient_id = :patient_id, encounter_date = :encounter_date, specialty = :specialty, summary = :summary, professional_user_id = :user_id, updated_at = NOW()
+        SET patient_id = :patient_id, encounter_date = :encounter_date, specialty = :specialty, record_type = :record_type, summary = :summary, professional_user_id = :user_id, updated_at = NOW()
         WHERE id = :id
       ');
       $stmt->execute([
         ':patient_id' => $data['patient_id'],
         ':encounter_date' => $data['encounter_date'],
         ':specialty' => $data['specialty'],
+        ':record_type' => $data['record_type'],
         ':summary' => $data['summary'],
         ':user_id' => $actorUserId,
         ':id' => $id,
@@ -146,13 +158,14 @@ final class Encounter {
     }
 
     $stmt = $pdo->prepare('
-      INSERT INTO encounters (patient_id, encounter_date, specialty, professional_user_id, summary)
-      VALUES (:patient_id, :encounter_date, :specialty, :user_id, :summary)
+      INSERT INTO encounters (patient_id, encounter_date, specialty, record_type, professional_user_id, summary)
+      VALUES (:patient_id, :encounter_date, :specialty, :record_type, :user_id, :summary)
     ');
     $stmt->execute([
       ':patient_id' => $data['patient_id'],
       ':encounter_date' => $data['encounter_date'],
       ':specialty' => $data['specialty'],
+      ':record_type' => $data['record_type'],
       ':user_id' => $actorUserId,
       ':summary' => $data['summary'],
     ]);

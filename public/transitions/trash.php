@@ -38,9 +38,9 @@ require __DIR__ . '/../../app/views/layout/header.php';
 ?>
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Lixeira - Transições</title></head>
+<head><meta charset="utf-8"><title>Lixeira - Encaminhamentos</title></head>
 <body>
-  <h1>Lixeira: Transições</h1>
+  <h1>Lixeira: Encaminhamentos</h1>
 
   <form method="get">
     <input name="q" value="<?= h($q) ?>" placeholder="Buscar paciente/CPF/equipe/status/serviço">

@@ -49,6 +49,14 @@ final class PatientController {
     $id = (int)(api_query_param('id', '0') ?? '0');
     $editing = $id > 0;
 
+    if (!$editing) {
+      $user = api_current_user($pdo);
+      $isUbs = strtoupper(trim((string)($user['user_type'] ?? ''))) === 'UBS';
+      if (!$isUbs && !can($pdo, 'admin.manage')) {
+        api_error('O cadastro de pacientes e exclusivo da UBS.', 403);
+      }
+    }
+
     if (api_request_method() === 'GET') {
       api_require_permission($pdo, $editing ? 'patients.update' : 'patients.create');
 

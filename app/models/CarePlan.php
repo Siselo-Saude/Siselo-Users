@@ -77,7 +77,14 @@ final class CarePlan {
   }
 
   public static function patientOptions(PDO $pdo): array {
-    $stmt = $pdo->query('SELECT id, full_name, cpf, team_ref FROM patients WHERE deleted_at IS NULL ORDER BY full_name ASC LIMIT 500');
+    $stmt = $pdo->query("
+      SELECT id, full_name, cpf, team_ref
+      FROM patients
+      WHERE deleted_at IS NULL
+        AND COALESCE(care_status, 'recebido') <> 'finalizado'
+      ORDER BY full_name ASC
+      LIMIT 500
+    ");
     $rows = $stmt->fetchAll();
 
     return array_map(

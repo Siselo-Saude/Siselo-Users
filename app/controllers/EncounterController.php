@@ -50,7 +50,7 @@ final class EncounterController {
 
     $validation = Encounter::validate(api_request_input());
     if ($validation['errors'] !== []) {
-      api_error('Paciente, data e especialidade sao obrigatorios.', 422, $validation['errors']);
+      api_error('Revise os dados do registro clinico.', 422, $validation['errors']);
     }
 
     try {

@@ -27,6 +27,11 @@ final class Patient {
     'inativo' => 'Inativo',
   ];
 
+  private const RISK_OPTIONS = [
+    'alto_risco' => 'Alto Risco',
+    'muito_alto_risco' => 'Muito Alto Risco',
+  ];
+
   private const LEGACY_TEAM_OPTIONS = [
     'sem_equipe' => 'Sem equipe',
     'safira' => 'Safira',
@@ -192,12 +197,13 @@ final class Patient {
     'emergency_contact',
     'allergies',
     'chronic_conditions',
+    'risk_classification',
     'ubs_ref',
     'team_ref',
   ];
 
   private const FIELD_LABELS = [
-    'first_cadh_date' => 'Data do primeiro atendimento CADH',
+    'first_cadh_date' => 'Data do compartilhamento com o CADH',
     'full_name' => 'Nome completo',
     'cpf' => 'CPF',
     'birth_date' => 'Data de nascimento',
@@ -211,6 +217,7 @@ final class Patient {
     'allergies' => 'Alergias',
     'chronic_conditions' => 'Condicoes cronicas',
     'status' => 'Status',
+    'risk_classification' => 'Classificacao de risco',
     'ubs_ref' => 'UBS de referencia',
     'team_ref' => 'Equipe',
   ];
@@ -259,6 +266,7 @@ final class Patient {
       'gender_options' => self::GENDER_OPTIONS,
       'race_options' => self::RACE_OPTIONS,
       'status_options' => self::STATUS_OPTIONS,
+      'risk_options' => self::RISK_OPTIONS,
       'ubs_options' => self::ubsOptions(),
       'team_options' => self::teamOptions(),
     ];
@@ -303,6 +311,8 @@ final class Patient {
       'allergies' => '',
       'chronic_conditions' => '',
       'status' => 'ativo',
+      'risk_classification' => 'alto_risco',
+      'care_status' => 'recebido',
       'ubs_ref' => '',
       'team_ref' => '',
     ];
@@ -353,6 +363,8 @@ final class Patient {
       'allergies' => trim((string)($payload['allergies'] ?? '')),
       'chronic_conditions' => trim((string)($payload['chronic_conditions'] ?? '')),
       'status' => self::normalizeOptionValue((string)($payload['status'] ?? 'ativo'), self::STATUS_OPTIONS),
+      'risk_classification' => self::normalizeOptionValue((string)($payload['risk_classification'] ?? 'alto_risco'), self::RISK_OPTIONS),
+      'care_status' => self::normalizeSingleLine((string)($payload['care_status'] ?? 'recebido')),
       'ubs_ref' => self::normalizeSingleLine((string)($payload['uds_reference'] ?? $payload['ubs_ref'] ?? '')),
       'team_ref' => $teamRef,
     ];
@@ -402,6 +414,10 @@ final class Patient {
       self::setError($errors, 'status', 'Selecione um status valido.');
     }
 
+    if ($data['risk_classification'] !== '' && !array_key_exists($data['risk_classification'], self::RISK_OPTIONS)) {
+      self::setError($errors, 'risk_classification', 'Selecione uma classificacao de risco valida.');
+    }
+
     if ($data['team_ref'] !== '' && !array_key_exists($data['team_ref'], self::teamOptions())) {
       self::setError($errors, 'team_ref', 'Selecione uma equipe valida.');
     }
@@ -444,6 +460,7 @@ final class Patient {
         if ($before === null) {
           throw new RuntimeException('Paciente nao encontrado.');
         }
+        $data['care_status'] = (string)($before['care_status'] ?? 'recebido');
 
         $stmt = $pdo->prepare(
           'UPDATE patients SET
@@ -464,6 +481,8 @@ final class Patient {
             allergies = :allergies,
             chronic_conditions = :chronic_conditions,
             status = :status,
+            risk_classification = :risk_classification,
+            care_status = :care_status,
             ubs_ref = :ubs_ref,
             team_ref = :team_ref,
             updated_at = NOW()
@@ -474,11 +493,12 @@ final class Patient {
         Audit::log($pdo, $actorUserId, 'update', 'patients', $id, $before, $data);
         $patientId = $id;
       } else {
+        $data['care_status'] = 'recebido';
         $stmt = $pdo->prepare(
           'INSERT INTO patients
-          (first_cadh_date, full_name, ses, cpf, birth_date, sex, race, responsible_name, phone, address, email, emergency_contact, health_insurance, blood_type, allergies, chronic_conditions, status, ubs_ref, team_ref)
+          (first_cadh_date, full_name, ses, cpf, birth_date, sex, race, responsible_name, phone, address, email, emergency_contact, health_insurance, blood_type, allergies, chronic_conditions, status, risk_classification, care_status, ubs_ref, team_ref)
           VALUES
-          (:first_cadh_date, :full_name, :ses, :cpf, :birth_date, :sex, :race, :responsible_name, :phone, :address, :email, :emergency_contact, :health_insurance, :blood_type, :allergies, :chronic_conditions, :status, :ubs_ref, :team_ref)'
+          (:first_cadh_date, :full_name, :ses, :cpf, :birth_date, :sex, :race, :responsible_name, :phone, :address, :email, :emergency_contact, :health_insurance, :blood_type, :allergies, :chronic_conditions, :status, :risk_classification, :care_status, :ubs_ref, :team_ref)'
         );
         $stmt->execute($data);
         $patientId = (int)$pdo->lastInsertId();
@@ -606,7 +626,13 @@ final class Patient {
   }
 
   public static function encountersFor(PDO $pdo, int $patientId): array {
-    $stmt = $pdo->prepare('SELECT * FROM encounters WHERE patient_id = :patient_id AND deleted_at IS NULL ORDER BY encounter_date DESC, id DESC');
+    $stmt = $pdo->prepare('
+      SELECT e.*, u.name AS professional_name
+      FROM encounters e
+      LEFT JOIN users u ON u.id = e.professional_user_id
+      WHERE e.patient_id = :patient_id AND e.deleted_at IS NULL
+      ORDER BY e.encounter_date DESC, e.id DESC
+    ');
     $stmt->execute([':patient_id' => $patientId]);
     return $stmt->fetchAll();
   }
@@ -620,6 +646,10 @@ final class Patient {
   private static function listByDeletedState(PDO $pdo, string $query, bool $deleted): array {
     $sql = 'SELECT * FROM patients WHERE deleted_at IS ' . ($deleted ? 'NOT NULL' : 'NULL');
     $params = [];
+
+    if (!$deleted) {
+      $sql .= " AND COALESCE(care_status, 'recebido') <> 'finalizado'";
+    }
 
     if ($query !== '') {
       if ($deleted) {
@@ -663,11 +693,13 @@ final class Patient {
     $ageLabel = self::ageLabel($row['birth_date'] ?? null);
     $genderKey = strtolower((string)($row['sex'] ?? ''));
     $statusKey = strtolower((string)($row['status'] ?? 'ativo'));
+    $riskKey = strtolower((string)($row['risk_classification'] ?? 'alto_risco'));
 
     $row['id'] = (int)$row['id'];
     $row['age_label'] = $ageLabel;
     $row['gender_label'] = self::GENDER_OPTIONS[$genderKey] ?? '';
     $row['status_label'] = self::STATUS_OPTIONS[$statusKey] ?? 'Ativo';
+    $row['risk_label'] = self::RISK_OPTIONS[$riskKey] ?? 'Alto Risco';
     unset($row['health_insurance'], $row['blood_type']);
 
     return $row;

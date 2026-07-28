@@ -68,7 +68,7 @@ final class TransitionController {
     $id = (int)(api_request_input()['id'] ?? 0);
     $row = Transition::softDelete($pdo, $id, api_require_user_id());
     if ($row === null) {
-      api_error('Transicao nao encontrada.', 404);
+      api_error('Encaminhamento nao encontrado.', 404);
     }
 
     api_success(['transition' => $row]);
@@ -81,7 +81,7 @@ final class TransitionController {
     $id = (int)(api_request_input()['id'] ?? 0);
     $row = Transition::restore($pdo, $id, api_require_user_id());
     if ($row === null) {
-      api_error('Transicao nao encontrada.', 404);
+      api_error('Encaminhamento nao encontrado.', 404);
     }
 
     api_success(['transition' => $row]);
@@ -94,7 +94,7 @@ final class TransitionController {
     $id = (int)(api_request_input()['id'] ?? 0);
     $row = Transition::destroy($pdo, $id, api_require_user_id());
     if ($row === null) {
-      api_error('Transicao nao encontrada na lixeira.', 404);
+      api_error('Encaminhamento nao encontrado na lixeira.', 404);
     }
 
     api_success(['transition' => $row]);

@@ -11,7 +11,7 @@ final class Transition {
 
   public static function list(PDO $pdo, string $query = '', ?int $patientId = null, bool $trash = false): array {
     $sql = '
-      SELECT t.*, p.full_name, p.cpf, p.team_ref
+      SELECT t.*, p.full_name, p.cpf, p.team_ref, p.care_status
       FROM transitions t
       JOIN patients p ON p.id = t.patient_id
       WHERE t.deleted_at IS ' . ($trash ? 'NOT NULL' : 'NULL') . ' AND p.deleted_at IS NULL
@@ -83,7 +83,7 @@ final class Transition {
           'row' => null,
           'patients' => self::patientOptions($pdo),
           'statuses' => self::statuses(),
-          'error' => 'Transicao nao encontrada.',
+          'error' => 'Encaminhamento nao encontrado.',
         ];
       }
     } else {
@@ -138,7 +138,7 @@ final class Transition {
     if ($editing) {
       $before = self::find($pdo, $id);
       if ($before === null) {
-        throw new RuntimeException('Transicao nao encontrada.');
+        throw new RuntimeException('Encaminhamento nao encontrado.');
       }
 
       $stmt = $pdo->prepare('

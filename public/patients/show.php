@@ -107,7 +107,7 @@ require __DIR__ . '/../../app/views/layout/header.php';
   <p>
     <?= tabLink($id, 'planos', 'Planos de Cuidado', $tab) ?> |
     <?= tabLink($id, 'atendimentos', 'Atendimentos', $tab) ?> |
-    <?= tabLink($id, 'transicoes', 'Transicoes', $tab) ?>
+    <?= tabLink($id, 'transicoes', 'Encaminhamentos', $tab) ?>
   </p>
 
   <hr>
@@ -115,7 +115,7 @@ require __DIR__ . '/../../app/views/layout/header.php';
   <?php if ($tab === 'planos'): ?>
     <h2>Planos de Cuidado</h2>
     <?php if (can($pdo, 'transitions.create')): ?>
-      <p><a href="/transitions/form.php?patient_id=<?= $id ?>">+ Nova transicao para este paciente</a></p>
+      <p><a href="/transitions/form.php?patient_id=<?= $id ?>">+ Novo encaminhamento para este paciente</a></p>
     <?php endif; ?>
     <?php if (can($pdo, 'careplans.create')): ?>
       <p><a href="/care_plans/form.php?patient_id=<?= $id ?>">+ Novo plano para este paciente</a></p>
@@ -155,7 +155,7 @@ require __DIR__ . '/../../app/views/layout/header.php';
     </table>
 
   <?php elseif ($tab === 'transicoes'): ?>
-    <h2>Transicoes</h2>
+    <h2>Encaminhamentos</h2>
     <table border="1" cellpadding="6">
       <tr><th>Data</th><th>De</th><th>Para</th><th>Status</th><th>Notas</th></tr>
       <?php foreach ($trans as $t): ?>
