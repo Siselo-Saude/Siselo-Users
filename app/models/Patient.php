@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../services/Audit.php';
+require_once __DIR__ . '/CareContracts.php';
+require_once __DIR__ . '/CareNetwork.php';
 
 final class Patient {
   private const MIN_DATE = '1900-01-01';
@@ -184,19 +186,16 @@ final class Patient {
   ];
 
   private const REQUIRED_FIELDS = [
-    'first_cadh_date',
     'full_name',
     'cpf',
     'birth_date',
     'sex',
     'race',
-    'responsible_name',
     'phone',
     'address',
     'email',
     'emergency_contact',
-    'allergies',
-    'chronic_conditions',
+    'entry_condition',
     'risk_classification',
     'ubs_ref',
     'team_ref',
@@ -216,6 +215,7 @@ final class Patient {
     'emergency_contact' => 'Contato de emergencia',
     'allergies' => 'Alergias',
     'chronic_conditions' => 'Condicoes cronicas',
+    'entry_condition' => 'Diagnostico/condicao de entrada',
     'status' => 'Status',
     'risk_classification' => 'Classificacao de risco',
     'ubs_ref' => 'UBS de referencia',
@@ -238,37 +238,27 @@ final class Patient {
   ];
 
   private static function ubsOptions(): array {
-    $options = [];
-    foreach (self::UBS_TEAM_GROUPS as $group) {
-      $ubs = (string)$group['ubs'];
-      $options[$ubs] = $ubs;
-    }
-
-    return $options;
+    return CareNetwork::ubsOptions();
   }
 
   private static function teamOptions(): array {
-    $options = self::LEGACY_TEAM_OPTIONS;
-    foreach (self::UBS_TEAM_GROUPS as $group) {
-      foreach ($group['teams'] as $team) {
-        $team = (string)$team;
-        $options[$team] = $team;
-      }
-    }
-
-    return $options;
+    return self::LEGACY_TEAM_OPTIONS + CareNetwork::teamOptions();
   }
 
   public static function options(): array {
     return [
       'min_date' => self::MIN_DATE,
-      'max_date' => self::MAX_DATE,
+      'max_date' => date('Y-m-d'),
       'gender_options' => self::GENDER_OPTIONS,
       'race_options' => self::RACE_OPTIONS,
       'status_options' => self::STATUS_OPTIONS,
       'risk_options' => self::RISK_OPTIONS,
+      'entry_condition_options' => CareContracts::entryConditions(),
+      'responsible_required_under_age' => CareContracts::RESPONSIBLE_REQUIRED_UNDER_AGE,
       'ubs_options' => self::ubsOptions(),
       'team_options' => self::teamOptions(),
+      'ubs_team_groups' => CareNetwork::groups(),
+      'contracts' => CareContracts::options(),
     ];
   }
 
@@ -310,6 +300,7 @@ final class Patient {
       'emergency_contact' => '',
       'allergies' => '',
       'chronic_conditions' => '',
+      'entry_condition' => '',
       'status' => 'ativo',
       'risk_classification' => 'alto_risco',
       'care_status' => 'recebido',
@@ -339,10 +330,19 @@ final class Patient {
     ];
   }
 
-  public static function validate(array $payload): array {
-    $teamRef = self::normalizeOptionValue((string)($payload['team_reference'] ?? $payload['team_ref'] ?? ''), self::teamOptions());
-    if ($teamRef === '') {
+  public static function validate(array $payload, bool $editing = false, ?array $existing = null): array {
+    $rawTeamRef = self::normalizeSingleLine((string)($payload['team_reference'] ?? $payload['team_ref'] ?? ''));
+    $teamRef = self::normalizeOptionValue($rawTeamRef, self::teamOptions());
+    if (
+      $teamRef === ''
+      && $editing
+      && self::normalizeOptionComparable($rawTeamRef) === self::normalizeOptionComparable((string)($existing['team_ref'] ?? ''))
+    ) {
+      $teamRef = $rawTeamRef;
+    } elseif ($teamRef === '' && $rawTeamRef === '') {
       $teamRef = 'sem_equipe';
+    } elseif ($teamRef === '') {
+      $teamRef = $rawTeamRef;
     }
 
     $data = [
@@ -362,7 +362,10 @@ final class Patient {
       'blood_type' => '',
       'allergies' => trim((string)($payload['allergies'] ?? '')),
       'chronic_conditions' => trim((string)($payload['chronic_conditions'] ?? '')),
-      'status' => self::normalizeOptionValue((string)($payload['status'] ?? 'ativo'), self::STATUS_OPTIONS),
+      'entry_condition' => self::normalizeOptionValue((string)($payload['entry_condition'] ?? ''), CareContracts::entryConditions()),
+      'status' => $editing
+        ? self::normalizeOptionValue((string)($payload['status'] ?? 'ativo'), self::STATUS_OPTIONS)
+        : 'ativo',
       'risk_classification' => self::normalizeOptionValue((string)($payload['risk_classification'] ?? 'alto_risco'), self::RISK_OPTIONS),
       'care_status' => self::normalizeSingleLine((string)($payload['care_status'] ?? 'recebido')),
       'ubs_ref' => self::normalizeSingleLine((string)($payload['uds_reference'] ?? $payload['ubs_ref'] ?? '')),
@@ -387,6 +390,19 @@ final class Patient {
       self::setError($errors, 'birth_date', 'Informe uma data valida.');
     } elseif ($data['birth_date'] !== null && !self::isDateInRange($data['birth_date'])) {
       self::setError($errors, 'birth_date', 'Informe uma data entre 1900 e 2026.');
+    }
+
+    if (
+      $data['birth_date'] !== null
+      && self::isValidDate($data['birth_date'])
+      && CareContracts::isMinor($data['birth_date'])
+      && $data['responsible_name'] === ''
+    ) {
+      self::setError(
+        $errors,
+        'responsible_name',
+        'Responsavel obrigatorio para menores de ' . CareContracts::RESPONSIBLE_REQUIRED_UNDER_AGE . ' anos.'
+      );
     }
 
     if ($data['cpf'] !== null) {
@@ -418,7 +434,24 @@ final class Patient {
       self::setError($errors, 'risk_classification', 'Selecione uma classificacao de risco valida.');
     }
 
-    if ($data['team_ref'] !== '' && !array_key_exists($data['team_ref'], self::teamOptions())) {
+    if ($data['entry_condition'] !== '' && !array_key_exists($data['entry_condition'], CareContracts::entryConditions())) {
+      self::setError($errors, 'entry_condition', 'Selecione uma condicao de entrada valida.');
+    }
+
+    $existingUbs = trim((string)($existing['ubs_ref'] ?? ''));
+    $normalizedUbs = CareNetwork::normalizeUbs($data['ubs_ref']);
+    if ($normalizedUbs !== '') {
+      $data['ubs_ref'] = $normalizedUbs;
+    } elseif (!$editing || self::normalizeOptionComparable($data['ubs_ref']) !== self::normalizeOptionComparable($existingUbs)) {
+      self::setError($errors, 'ubs_ref', 'Selecione uma UBS valida para o fluxo atual.');
+    }
+
+    $existingTeam = trim((string)($existing['team_ref'] ?? ''));
+    if (
+      $data['team_ref'] !== ''
+      && !array_key_exists($data['team_ref'], self::teamOptions())
+      && (!$editing || self::normalizeOptionComparable($data['team_ref']) !== self::normalizeOptionComparable($existingTeam))
+    ) {
       self::setError($errors, 'team_ref', 'Selecione uma equipe valida.');
     }
 
@@ -480,6 +513,7 @@ final class Patient {
             blood_type = :blood_type,
             allergies = :allergies,
             chronic_conditions = :chronic_conditions,
+            entry_condition = :entry_condition,
             status = :status,
             risk_classification = :risk_classification,
             care_status = :care_status,
@@ -496,9 +530,9 @@ final class Patient {
         $data['care_status'] = 'recebido';
         $stmt = $pdo->prepare(
           'INSERT INTO patients
-          (first_cadh_date, full_name, ses, cpf, birth_date, sex, race, responsible_name, phone, address, email, emergency_contact, health_insurance, blood_type, allergies, chronic_conditions, status, risk_classification, care_status, ubs_ref, team_ref)
+          (first_cadh_date, full_name, ses, cpf, birth_date, sex, race, responsible_name, phone, address, email, emergency_contact, health_insurance, blood_type, allergies, chronic_conditions, entry_condition, status, risk_classification, care_status, ubs_ref, team_ref)
           VALUES
-          (:first_cadh_date, :full_name, :ses, :cpf, :birth_date, :sex, :race, :responsible_name, :phone, :address, :email, :emergency_contact, :health_insurance, :blood_type, :allergies, :chronic_conditions, :status, :risk_classification, :care_status, :ubs_ref, :team_ref)'
+          (:first_cadh_date, :full_name, :ses, :cpf, :birth_date, :sex, :race, :responsible_name, :phone, :address, :email, :emergency_contact, :health_insurance, :blood_type, :allergies, :chronic_conditions, :entry_condition, :status, :risk_classification, :care_status, :ubs_ref, :team_ref)'
         );
         $stmt->execute($data);
         $patientId = (int)$pdo->lastInsertId();
@@ -620,7 +654,13 @@ final class Patient {
   }
 
   public static function carePlansFor(PDO $pdo, int $patientId): array {
-    $stmt = $pdo->prepare('SELECT * FROM care_plans WHERE patient_id = :patient_id AND deleted_at IS NULL ORDER BY id DESC');
+    $stmt = $pdo->prepare('
+      SELECT cp.*, creator.name AS created_by_name
+      FROM care_plans cp
+      LEFT JOIN users creator ON creator.id = cp.created_by_user_id
+      WHERE cp.patient_id = :patient_id AND cp.deleted_at IS NULL
+      ORDER BY cp.id DESC
+    ');
     $stmt->execute([':patient_id' => $patientId]);
     return $stmt->fetchAll();
   }
@@ -638,7 +678,29 @@ final class Patient {
   }
 
   public static function transitionsFor(PDO $pdo, int $patientId): array {
-    $stmt = $pdo->prepare('SELECT * FROM transitions WHERE patient_id = :patient_id AND deleted_at IS NULL ORDER BY transition_date DESC, id DESC');
+    $stmt = $pdo->prepare('
+      SELECT t.*, creator.name AS created_by_name
+      FROM transitions t
+      LEFT JOIN users creator ON creator.id = t.created_by_user_id
+      WHERE t.patient_id = :patient_id AND t.deleted_at IS NULL
+      ORDER BY t.transition_date DESC, t.id DESC
+    ');
+    $stmt->execute([':patient_id' => $patientId]);
+    return $stmt->fetchAll();
+  }
+
+  public static function appointmentsFor(PDO $pdo, int $patientId): array {
+    $stmt = $pdo->prepare('
+      SELECT
+        a.*,
+        creator.name AS created_by_name,
+        resolver.name AS resolved_by_name
+      FROM patient_appointments a
+      LEFT JOIN users creator ON creator.id = a.created_by_user_id
+      LEFT JOIN users resolver ON resolver.id = a.resolved_by_user_id
+      WHERE a.patient_id = :patient_id AND a.deleted_at IS NULL
+      ORDER BY a.scheduled_at DESC, a.id DESC
+    ');
     $stmt->execute([':patient_id' => $patientId]);
     return $stmt->fetchAll();
   }
@@ -700,6 +762,8 @@ final class Patient {
     $row['gender_label'] = self::GENDER_OPTIONS[$genderKey] ?? '';
     $row['status_label'] = self::STATUS_OPTIONS[$statusKey] ?? 'Ativo';
     $row['risk_label'] = self::RISK_OPTIONS[$riskKey] ?? 'Alto Risco';
+    $entryCondition = (string)($row['entry_condition'] ?? '');
+    $row['entry_condition_label'] = CareContracts::entryConditions()[$entryCondition] ?? '';
     unset($row['health_insurance'], $row['blood_type']);
 
     return $row;
@@ -813,7 +877,7 @@ final class Patient {
       return true;
     }
 
-    return $value >= self::MIN_DATE && $value <= self::MAX_DATE;
+    return $value >= self::MIN_DATE && $value <= date('Y-m-d');
   }
 
   private static function isValidCpf(string $digits): bool {

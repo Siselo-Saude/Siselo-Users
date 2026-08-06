@@ -47,6 +47,10 @@ final class CarePlanController {
     }
 
     api_require_permission($pdo, $editing ? 'careplans.update' : 'careplans.create');
+    api_require_user_type($pdo, ['CADH']);
+    if ($editing) {
+      api_require_record_author($pdo, 'care_plans', $id);
+    }
     api_verify_csrf();
 
     $validation = CarePlan::validate(api_request_input());
@@ -67,6 +71,7 @@ final class CarePlanController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'care_plans', $id);
     $row = CarePlan::softDelete($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Plano nao encontrado.', 404);
@@ -80,6 +85,7 @@ final class CarePlanController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'care_plans', $id);
     $row = CarePlan::restore($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Plano nao encontrado.', 404);
@@ -93,6 +99,7 @@ final class CarePlanController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'care_plans', $id);
     $row = CarePlan::destroy($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Plano nao encontrado na lixeira.', 404);

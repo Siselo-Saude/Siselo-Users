@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/CarePlan.php';
+require_once __DIR__ . '/CareContracts.php';
+require_once __DIR__ . '/CareNetwork.php';
 require_once __DIR__ . '/../services/Audit.php';
 
 final class Transition {
@@ -11,10 +13,12 @@ final class Transition {
 
   public static function list(PDO $pdo, string $query = '', ?int $patientId = null, bool $trash = false): array {
     $sql = '
-      SELECT t.*, p.full_name, p.cpf, p.team_ref, p.care_status
+      SELECT t.*, p.full_name, p.cpf, p.team_ref, p.care_status, creator.name AS created_by_name
       FROM transitions t
       JOIN patients p ON p.id = t.patient_id
-      WHERE t.deleted_at IS ' . ($trash ? 'NOT NULL' : 'NULL') . ' AND p.deleted_at IS NULL
+      LEFT JOIN users creator ON creator.id = t.created_by_user_id
+      WHERE t.deleted_at IS ' . ($trash ? 'NOT NULL' : 'NULL') . '
+        AND p.deleted_at IS NULL AND t.flow_type = \'care_transition\'
     ';
     $params = [];
 
@@ -77,12 +81,15 @@ final class Transition {
 
     if ($editing) {
       $row = self::find($pdo, $id);
-      if ($row === null) {
+      if ($row === null || (string)($row['flow_type'] ?? 'care_transition') !== 'care_transition') {
         return [
           'editing' => true,
           'row' => null,
           'patients' => self::patientOptions($pdo),
           'statuses' => self::statuses(),
+          'ubs_options' => CareNetwork::ubsOptions(),
+          'team_options' => CareNetwork::teamOptions(),
+          'ubs_team_groups' => CareNetwork::groups(),
           'error' => 'Encaminhamento nao encontrado.',
         ];
       }
@@ -90,9 +97,11 @@ final class Transition {
       $row = [
         'patient_id' => $prefPatientId ?: '',
         'transition_date' => date('Y-m-d'),
-        'from_service' => '',
+        'from_service' => 'CADH',
         'to_service' => '',
-        'status' => 'pendente',
+        'destination_ubs' => '',
+        'destination_team' => '',
+        'status' => 'concluida',
         'notes' => '',
       ];
     }
@@ -102,6 +111,9 @@ final class Transition {
       'row' => $row,
       'patients' => self::patientOptions($pdo),
       'statuses' => self::statuses(),
+      'ubs_options' => CareNetwork::ubsOptions(),
+      'team_options' => CareNetwork::teamOptions(),
+      'ubs_team_groups' => CareNetwork::groups(),
       'error' => null,
     ];
   }
@@ -112,7 +124,9 @@ final class Transition {
       'transition_date' => trim((string)($payload['transition_date'] ?? '')),
       'from_service' => trim((string)($payload['from_service'] ?? '')),
       'to_service' => trim((string)($payload['to_service'] ?? '')),
-      'status' => trim((string)($payload['status'] ?? 'pendente')),
+      'destination_ubs' => trim((string)($payload['destination_ubs'] ?? $payload['to_service'] ?? '')),
+      'destination_team' => trim((string)($payload['destination_team'] ?? '')),
+      'status' => 'concluida',
       'notes' => trim((string)($payload['notes'] ?? '')),
     ];
 
@@ -123,60 +137,106 @@ final class Transition {
     if ($data['transition_date'] === '') {
       $errors['transition_date'] = 'Data obrigatoria.';
     }
-    if ($data['status'] === '') {
-      $errors['status'] = 'Status obrigatorio.';
-    } elseif (!in_array($data['status'], self::statuses(), true)) {
-      $errors['status'] = 'Status invalido.';
+    $data['from_service'] = 'CADH';
+    $data['destination_ubs'] = CareNetwork::normalizeUbs($data['destination_ubs']);
+    $data['destination_team'] = CareNetwork::normalizeTeam($data['destination_team']);
+    if ($data['destination_ubs'] === '') {
+      $errors['destination_ubs'] = 'UBS de destino obrigatoria.';
     }
+    if ($data['destination_team'] === '') {
+      $errors['destination_team'] = 'Equipe de destino obrigatoria.';
+    } elseif (!in_array($data['destination_team'], CareNetwork::teamsFor($data['destination_ubs']), true)) {
+      $errors['destination_team'] = 'A equipe nao pertence a UBS selecionada.';
+    }
+    $data['to_service'] = $data['destination_ubs'];
 
     return ['data' => $data, 'errors' => $errors];
   }
 
   public static function save(PDO $pdo, ?int $id, array $data, int $actorUserId): array {
     $editing = $id !== null;
-
+    $before = $editing ? self::find($pdo, (int)$id) : null;
+    if ($editing && ($before === null || (string)($before['flow_type'] ?? 'care_transition') !== 'care_transition')) {
+      throw new RuntimeException('Transicao de cuidado nao encontrada.');
+    }
     if ($editing) {
-      $before = self::find($pdo, $id);
-      if ($before === null) {
-        throw new RuntimeException('Encaminhamento nao encontrado.');
-      }
-
-      $stmt = $pdo->prepare('
-        UPDATE transitions
-        SET patient_id = :patient_id, transition_date = :transition_date, from_service = :from_service, to_service = :to_service, status = :status, notes = :notes, updated_at = NOW()
-        WHERE id = :id
-      ');
-      $stmt->execute([
-        ':patient_id' => $data['patient_id'],
-        ':transition_date' => $data['transition_date'],
-        ':from_service' => $data['from_service'],
-        ':to_service' => $data['to_service'],
-        ':status' => $data['status'],
-        ':notes' => $data['notes'],
-        ':id' => $id,
-      ]);
-
-      Audit::log($pdo, $actorUserId, 'update', 'transitions', $id, $before, $data);
-      return self::formContext($pdo, $id);
+      $data['patient_id'] = (int)$before['patient_id'];
     }
 
-    $stmt = $pdo->prepare('
-      INSERT INTO transitions (patient_id, transition_date, from_service, to_service, status, notes, created_by_user_id)
-      VALUES (:patient_id, :transition_date, :from_service, :to_service, :status, :notes, :user_id)
-    ');
-    $stmt->execute([
-      ':patient_id' => $data['patient_id'],
-      ':transition_date' => $data['transition_date'],
-      ':from_service' => $data['from_service'],
-      ':to_service' => $data['to_service'],
-      ':status' => $data['status'],
-      ':notes' => $data['notes'],
-      ':user_id' => $actorUserId,
-    ]);
+    $pdo->beginTransaction();
+    try {
+      $patient = $pdo->prepare('SELECT * FROM patients WHERE id = :id AND deleted_at IS NULL LIMIT 1 FOR UPDATE');
+      $patient->execute([':id' => $data['patient_id']]);
+      $patientBefore = $patient->fetch();
+      if (!$patientBefore) {
+        throw new RuntimeException('Paciente nao encontrado.');
+      }
+      if (!$editing && in_array((string)($patientBefore['care_status'] ?? ''), ['finalizado', 'transicionado'], true)) {
+        throw new RuntimeException('Paciente nao esta em acompanhamento ativo no CADH.');
+      }
 
-    $newId = (int)$pdo->lastInsertId();
-    Audit::log($pdo, $actorUserId, 'create', 'transitions', $newId, null, $data);
-    return self::formContext($pdo, $newId);
+      if ($editing) {
+        $stmt = $pdo->prepare("
+          UPDATE transitions
+          SET patient_id = :patient_id, flow_type = 'care_transition', transition_date = :transition_date,
+              from_service = 'CADH', to_service = :to_service, destination_ubs = :destination_ubs,
+              destination_team = :destination_team, status = 'concluida', notes = :notes, updated_at = NOW()
+          WHERE id = :id AND flow_type = 'care_transition'
+        ");
+      } else {
+        $stmt = $pdo->prepare("
+          INSERT INTO transitions
+            (patient_id, flow_type, transition_date, from_service, to_service, destination_ubs,
+             destination_team, status, notes, received_at, created_by_user_id)
+          VALUES
+            (:patient_id, 'care_transition', :transition_date, 'CADH', :to_service, :destination_ubs,
+             :destination_team, 'concluida', :notes, NOW(), :user_id)
+        ");
+      }
+      $params = [
+        ':patient_id' => $data['patient_id'],
+        ':transition_date' => $data['transition_date'],
+        ':to_service' => $data['destination_ubs'],
+        ':destination_ubs' => $data['destination_ubs'],
+        ':destination_team' => $data['destination_team'],
+        ':notes' => $data['notes'] !== '' ? $data['notes'] : null,
+      ];
+      if ($editing) {
+        $params[':id'] = $id;
+      } else {
+        $params[':user_id'] = $actorUserId;
+      }
+      $stmt->execute($params);
+      $transitionId = $editing ? (int)$id : (int)$pdo->lastInsertId();
+
+      $pdo->prepare("
+        UPDATE patients
+        SET ubs_ref = :ubs, team_ref = :team, care_status = 'transicionado', status = 'active', updated_at = NOW()
+        WHERE id = :id AND deleted_at IS NULL
+      ")->execute([
+        ':ubs' => $data['destination_ubs'],
+        ':team' => $data['destination_team'],
+        ':id' => $data['patient_id'],
+      ]);
+      $pdo->prepare("
+        UPDATE care_plans SET state = 'transicionado', updated_at = NOW()
+        WHERE patient_id = :patient_id AND deleted_at IS NULL AND state <> 'transicionado'
+      ")->execute([':patient_id' => $data['patient_id']]);
+
+      Audit::log($pdo, $actorUserId, $editing ? 'update' : 'create', 'transitions', $transitionId, $before, $data);
+      Audit::log($pdo, $actorUserId, 'transition_care', 'patients', (int)$data['patient_id'], $patientBefore, [
+        'care_status' => 'transicionado',
+        'ubs_ref' => $data['destination_ubs'],
+        'team_ref' => $data['destination_team'],
+      ]);
+      $pdo->commit();
+      return self::formContext($pdo, $transitionId);
+    } catch (Throwable $error) {
+      if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+      }
+      throw $error;
+    }
   }
 
   public static function softDelete(PDO $pdo, int $id, int $actorUserId): ?array {

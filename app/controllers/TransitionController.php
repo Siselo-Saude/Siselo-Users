@@ -46,6 +46,10 @@ final class TransitionController {
     }
 
     api_require_permission($pdo, $editing ? 'transitions.update' : 'transitions.create');
+    api_require_user_type($pdo, ['CADH']);
+    if ($editing) {
+      api_require_record_author($pdo, 'transitions', $id);
+    }
     api_verify_csrf();
 
     $validation = Transition::validate(api_request_input());
@@ -66,6 +70,7 @@ final class TransitionController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'transitions', $id);
     $row = Transition::softDelete($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Encaminhamento nao encontrado.', 404);
@@ -79,6 +84,7 @@ final class TransitionController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'transitions', $id);
     $row = Transition::restore($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Encaminhamento nao encontrado.', 404);
@@ -92,6 +98,7 @@ final class TransitionController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'transitions', $id);
     $row = Transition::destroy($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Encaminhamento nao encontrado na lixeira.', 404);

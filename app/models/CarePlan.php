@@ -2,13 +2,15 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../services/Audit.php';
+require_once __DIR__ . '/CareContracts.php';
 
 final class CarePlan {
   public static function list(PDO $pdo, string $query = '', ?int $patientId = null, bool $trash = false): array {
     $sql = '
-      SELECT cp.*, p.full_name, p.cpf, p.team_ref
+      SELECT cp.*, p.full_name, p.cpf, p.team_ref, creator.name AS created_by_name
       FROM care_plans cp
       JOIN patients p ON p.id = cp.patient_id
+      LEFT JOIN users creator ON creator.id = cp.created_by_user_id
       WHERE cp.deleted_at IS ' . ($trash ? 'NOT NULL' : 'NULL') . ' AND p.deleted_at IS NULL
     ';
     $params = [];
@@ -107,6 +109,7 @@ final class CarePlan {
           'plan' => null,
           'items' => [],
           'patients' => self::patientOptions($pdo),
+          'state_options' => CareContracts::carePlanStates(),
           'error' => 'Plano nao encontrado.',
         ];
       }
@@ -115,8 +118,10 @@ final class CarePlan {
     } else {
       $plan = [
         'patient_id' => $prefPatientId ?: '',
+        'state' => 'em_elaboracao',
         'start_date' => '',
         'end_date' => '',
+        'review_date' => self::suggestedReviewDate($pdo, $prefPatientId),
         'interventions' => '',
       ];
       $items = [];
@@ -127,6 +132,7 @@ final class CarePlan {
       'plan' => $plan,
       'items' => $items,
       'patients' => self::patientOptions($pdo),
+      'state_options' => CareContracts::carePlanStates(),
       'error' => null,
     ];
   }
@@ -135,6 +141,8 @@ final class CarePlan {
     $patientId = (int)($payload['patient_id'] ?? 0);
     $startDate = trim((string)($payload['start_date'] ?? ''));
     $endDate = trim((string)($payload['end_date'] ?? ''));
+    $reviewDate = trim((string)($payload['review_date'] ?? ''));
+    $state = trim((string)($payload['state'] ?? 'em_elaboracao'));
     $interventions = trim((string)($payload['interventions'] ?? ''));
 
     $itemType = array_values((array)($payload['item_type'] ?? []));
@@ -152,6 +160,9 @@ final class CarePlan {
 
     if ($startDate === '') {
       $errors['start_date'] = 'Data de inicio obrigatoria.';
+    }
+    if (!array_key_exists($state, CareContracts::carePlanStates())) {
+      $errors['state'] = 'Estado do plano invalido.';
     }
 
     $items = [];
@@ -185,6 +196,8 @@ final class CarePlan {
         'patient_id' => $patientId,
         'start_date' => $startDate,
         'end_date' => ($endDate === '' ? null : $endDate),
+        'review_date' => ($reviewDate === '' ? null : $reviewDate),
+        'state' => $state,
         'interventions' => $interventions,
         'items' => $items,
       ],
@@ -203,11 +216,13 @@ final class CarePlan {
           throw new RuntimeException('Plano nao encontrado.');
         }
 
-        $update = $pdo->prepare('UPDATE care_plans SET patient_id = :patient_id, start_date = :start_date, end_date = :end_date, interventions = :interventions, updated_at = NOW() WHERE id = :id');
+        $update = $pdo->prepare('UPDATE care_plans SET patient_id = :patient_id, state = :state, start_date = :start_date, end_date = :end_date, review_date = :review_date, interventions = :interventions, updated_at = NOW() WHERE id = :id');
         $update->execute([
           ':patient_id' => $data['patient_id'],
+          ':state' => $data['state'],
           ':start_date' => $data['start_date'],
           ':end_date' => $data['end_date'],
+          ':review_date' => $data['review_date'],
           ':interventions' => $data['interventions'],
           ':id' => $id,
         ]);
@@ -217,15 +232,19 @@ final class CarePlan {
 
         Audit::log($pdo, $actorUserId, 'update', 'care_plans', $id, $before, [
           'patient_id' => $data['patient_id'],
+          'state' => $data['state'],
           'start_date' => $data['start_date'],
           'end_date' => $data['end_date'],
+          'review_date' => $data['review_date'],
         ]);
       } else {
-        $insert = $pdo->prepare('INSERT INTO care_plans (patient_id, start_date, end_date, interventions, created_by_user_id) VALUES (:patient_id, :start_date, :end_date, :interventions, :user_id)');
+        $insert = $pdo->prepare('INSERT INTO care_plans (patient_id, state, start_date, end_date, review_date, interventions, created_by_user_id) VALUES (:patient_id, :state, :start_date, :end_date, :review_date, :interventions, :user_id)');
         $insert->execute([
           ':patient_id' => $data['patient_id'],
+          ':state' => $data['state'],
           ':start_date' => $data['start_date'],
           ':end_date' => $data['end_date'],
+          ':review_date' => $data['review_date'],
           ':interventions' => $data['interventions'],
           ':user_id' => $actorUserId,
         ]);
@@ -233,8 +252,10 @@ final class CarePlan {
         $planId = (int)$pdo->lastInsertId();
         Audit::log($pdo, $actorUserId, 'create', 'care_plans', $planId, null, [
           'patient_id' => $data['patient_id'],
+          'state' => $data['state'],
           'start_date' => $data['start_date'],
           'end_date' => $data['end_date'],
+          'review_date' => $data['review_date'],
         ]);
       }
 
@@ -314,5 +335,23 @@ final class CarePlan {
     }
 
     return $before;
+  }
+
+  private static function suggestedReviewDate(PDO $pdo, int $patientId): string {
+    if ($patientId <= 0) {
+      return '';
+    }
+
+    $stmt = $pdo->prepare("
+      SELECT DATE(scheduled_at)
+      FROM patient_appointments
+      WHERE patient_id = :patient_id AND deleted_at IS NULL
+        AND status IN ('agendado', 'aguardando', 'em_atendimento')
+        AND scheduled_at >= NOW()
+      ORDER BY scheduled_at ASC
+      LIMIT 1
+    ");
+    $stmt->execute([':patient_id' => $patientId]);
+    return (string)($stmt->fetchColumn() ?: '');
   }
 }

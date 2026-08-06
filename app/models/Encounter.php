@@ -9,6 +9,7 @@ final class Encounter {
     'diagnostico' => 'Diagnóstico',
     'exame' => 'Exame',
     'consulta' => 'Consulta',
+    'ubs_acompanhamento' => 'Acompanhamento pela UBS',
   ];
 
   public static function list(PDO $pdo, string $query = '', ?int $patientId = null, bool $trash = false): array {
@@ -65,6 +66,9 @@ final class Encounter {
       if ($row['follow_up_appointment_id'] !== null) {
         $row['follow_up_appointment_id'] = (int)$row['follow_up_appointment_id'];
       }
+      if ($row['transition_id'] !== null) {
+        $row['transition_id'] = (int)$row['transition_id'];
+      }
       return $row;
       },
       $rows
@@ -93,6 +97,9 @@ final class Encounter {
     if ($row['follow_up_appointment_id'] !== null) {
       $row['follow_up_appointment_id'] = (int)$row['follow_up_appointment_id'];
     }
+    if ($row['transition_id'] !== null) {
+      $row['transition_id'] = (int)$row['transition_id'];
+    }
     return $row;
   }
 
@@ -118,6 +125,7 @@ final class Encounter {
         'patient_id' => $prefPatientId ?: '',
         'appointment_id' => '',
         'follow_up_appointment_id' => '',
+        'transition_id' => '',
         'encounter_date' => date('Y-m-d'),
         'specialty' => '',
         'record_type' => 'consulta',
@@ -139,6 +147,7 @@ final class Encounter {
     $data = [
       'patient_id' => (int)($payload['patient_id'] ?? 0),
       'appointment_id' => (int)($payload['appointment_id'] ?? 0),
+      'transition_id' => (int)($payload['transition_id'] ?? 0),
       'encounter_date' => trim((string)($payload['encounter_date'] ?? '')),
       'specialty' => trim((string)($payload['specialty'] ?? '')),
       'record_type' => trim((string)($payload['record_type'] ?? 'consulta')),
@@ -165,6 +174,9 @@ final class Encounter {
     }
     if ($data['schema_version'] === '') {
       $errors['schema_version'] = 'Versao do registro invalida.';
+    }
+    if ($data['record_type'] === 'ubs_acompanhamento' && $data['summary'] === '') {
+      $errors['summary'] = 'Registre um resumo do acompanhamento realizado.';
     }
     if ($data['payload_json'] === false) {
       $errors['payload_json'] = 'Dados clinicos invalidos.';
@@ -209,6 +221,24 @@ final class Encounter {
       if ($before !== null && $data['payload_json'] === null && !empty($before['payload_json'])) {
         $data['payload_json'] = (string)$before['payload_json'];
       }
+      if ($before !== null && $data['transition_id'] <= 0 && !empty($before['transition_id'])) {
+        $data['transition_id'] = (int)$before['transition_id'];
+      }
+
+      if ($data['record_type'] === 'ubs_acompanhamento') {
+        if ($data['transition_id'] <= 0) {
+          throw new InvalidArgumentException('Vincule o acompanhamento a uma transicao CADH-UBS.');
+        }
+        $transition = $pdo->prepare("
+          SELECT id FROM transitions
+          WHERE id = :id AND patient_id = :patient_id AND flow_type = 'care_transition' AND deleted_at IS NULL
+          LIMIT 1
+        ");
+        $transition->execute([':id' => $data['transition_id'], ':patient_id' => $data['patient_id']]);
+        if ($transition->fetchColumn() === false) {
+          throw new InvalidArgumentException('A transicao informada nao pertence ao paciente.');
+        }
+      }
 
       $appointment = null;
       if ($data['appointment_id'] > 0) {
@@ -219,7 +249,7 @@ final class Encounter {
         if ((int)$appointment['patient_id'] !== (int)$data['patient_id']) {
           throw new InvalidArgumentException('O agendamento nao pertence ao paciente informado.');
         }
-        if (!in_array((string)$appointment['status'], ['agendado', 'atendido'], true)) {
+        if (!in_array((string)$appointment['status'], ['agendado', 'aguardando', 'em_atendimento', 'atendido'], true)) {
           throw new RuntimeException('Este agendamento foi encerrado sem atendimento e nao aceita registro clinico.');
         }
 
@@ -244,6 +274,7 @@ final class Encounter {
           UPDATE encounters
           SET patient_id = :patient_id,
               appointment_id = :appointment_id,
+              transition_id = :transition_id,
               encounter_date = :encounter_date,
               specialty = :specialty,
               record_type = :record_type,
@@ -261,9 +292,9 @@ final class Encounter {
       } else {
         $stmt = $pdo->prepare('
           INSERT INTO encounters
-            (patient_id, appointment_id, encounter_date, specialty, record_type, schema_version, payload_json, professional_user_id, summary)
+            (patient_id, appointment_id, transition_id, encounter_date, specialty, record_type, schema_version, payload_json, professional_user_id, summary)
           VALUES
-            (:patient_id, :appointment_id, :encounter_date, :specialty, :record_type, :schema_version, :payload_json, :user_id, :summary)
+            (:patient_id, :appointment_id, :transition_id, :encounter_date, :specialty, :record_type, :schema_version, :payload_json, :user_id, :summary)
         ');
         $stmt->execute(self::saveParams($data, $actorUserId));
         $encounterId = (int)$pdo->lastInsertId();
@@ -274,6 +305,7 @@ final class Encounter {
         $updateAppointment = $pdo->prepare("
           UPDATE patient_appointments
           SET status = 'atendido',
+              completed_at = COALESCE(completed_at, NOW()),
               outcome_reason = NULL,
               outcome_notes = NULL,
               resolved_at = NOW(),
@@ -285,6 +317,12 @@ final class Encounter {
           ':user_id' => $actorUserId,
           ':id' => (int)$appointment['id'],
         ]);
+        if (!empty($appointment['sharing_transition_id'])) {
+          $pdo->prepare("
+            UPDATE transitions SET status = 'atendido', updated_at = NOW()
+            WHERE id = :id AND flow_type = 'care_sharing' AND deleted_at IS NULL
+          ")->execute([':id' => (int)$appointment['sharing_transition_id']]);
+        }
         Audit::log($pdo, $actorUserId, 'complete', 'patient_appointments', (int)$appointment['id'], $appointment, [
           'status' => 'atendido',
           'encounter_id' => $encounterId,
@@ -322,6 +360,7 @@ final class Encounter {
     $params = [
       ':patient_id' => $data['patient_id'],
       ':appointment_id' => $data['appointment_id'] > 0 ? $data['appointment_id'] : null,
+      ':transition_id' => $data['transition_id'] > 0 ? $data['transition_id'] : null,
       ':encounter_date' => $data['encounter_date'],
       ':specialty' => $data['specialty'],
       ':record_type' => $data['record_type'],

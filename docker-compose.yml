@@ -17,6 +17,7 @@ services:
       - ./database_patch_009.sql:/docker-entrypoint-initdb.d/09-database_patch_009.sql:ro
       - ./database_patch_010.sql:/docker-entrypoint-initdb.d/10-database_patch_010.sql:ro
       - ./database_patch_011.sql:/docker-entrypoint-initdb.d/11-database_patch_011.sql:ro
+      - ./database_patch_012.sql:/docker-entrypoint-initdb.d/12-database_patch_012.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
@@ -38,10 +39,11 @@ services:
       - ./database_patch_009.sql:/migrations/database_patch_009.sql:ro
       - ./database_patch_010.sql:/migrations/database_patch_010.sql:ro
       - ./database_patch_011.sql:/migrations/database_patch_011.sql:ro
+      - ./database_patch_012.sql:/migrations/database_patch_012.sql:ro
     entrypoint:
       - sh
       - -c
-      - mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_003.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_004.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_005.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_006.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_007.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_008.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_009.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_010.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_011.sql
+      - mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_003.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_004.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_005.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_006.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_007.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_008.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_009.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_010.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_011.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_012.sql
 
   users:
     build: .
@@ -59,6 +61,8 @@ services:
       DB_PASSWORD: rootpassword
       DB_NAME: intranet_cadh
       FRONTEND_ORIGIN: http://localhost:3000
+      SHARING_ALERT_DAYS: 7
+      UBS_MONITORING_ALERT_DAYS: 90
 
   frontend:
     image: node:16

@@ -42,6 +42,8 @@ final class PatientController {
       'care_plans' => can($pdo, 'careplans.view') ? Patient::carePlansFor($pdo, $id) : [],
       'encounters' => can($pdo, 'encounters.view') ? Patient::encountersFor($pdo, $id) : [],
       'transitions' => can($pdo, 'transitions.view') ? Patient::transitionsFor($pdo, $id) : [],
+      'appointments' => can($pdo, 'careflow.view') ? Patient::appointmentsFor($pdo, $id) : [],
+      'options' => Patient::options(),
     ]);
   }
 
@@ -71,7 +73,8 @@ final class PatientController {
     api_require_permission($pdo, $editing ? 'patients.update' : 'patients.create');
     api_verify_csrf();
 
-    $validation = Patient::validate(api_request_input());
+    $existing = $editing ? Patient::find($pdo, $id) : null;
+    $validation = Patient::validate(api_request_input(), $editing, $existing);
     if ($validation['errors'] !== []) {
       api_error('Revise os campos destacados e tente novamente.', 422, $validation['errors']);
     }

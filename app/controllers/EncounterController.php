@@ -52,6 +52,13 @@ final class EncounterController {
     if ($validation['errors'] !== []) {
       api_error('Revise os dados do registro clinico.', 422, $validation['errors']);
     }
+    api_require_user_type(
+      $pdo,
+      ($validation['data']['record_type'] ?? '') === 'ubs_acompanhamento' ? ['UBS'] : ['CADH', 'UBS']
+    );
+    if ($editing) {
+      api_require_record_author($pdo, 'encounters', $id, 'professional_user_id');
+    }
 
     try {
       $context = Encounter::save($pdo, $editing ? $id : null, $validation['data'], api_require_user_id());
@@ -66,6 +73,7 @@ final class EncounterController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'encounters', $id, 'professional_user_id');
     $row = Encounter::softDelete($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Atendimento nao encontrado.', 404);
@@ -79,6 +87,7 @@ final class EncounterController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'encounters', $id, 'professional_user_id');
     $row = Encounter::restore($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Atendimento nao encontrado.', 404);
@@ -92,6 +101,7 @@ final class EncounterController {
     api_verify_csrf();
 
     $id = (int)(api_request_input()['id'] ?? 0);
+    api_require_record_author($pdo, 'encounters', $id, 'professional_user_id');
     $row = Encounter::destroy($pdo, $id, api_require_user_id());
     if ($row === null) {
       api_error('Atendimento nao encontrado na lixeira.', 404);

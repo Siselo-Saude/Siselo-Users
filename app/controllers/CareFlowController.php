@@ -15,6 +15,8 @@ final class CareFlowController {
         'appointment_scope' => api_query_param('appointment_scope', 'latest'),
       ]),
       'options' => CareFlow::options(),
+      'metrics' => CareFlow::metrics($pdo),
+      'alerts' => CareFlow::alerts($pdo),
       'appointment' => $appointmentId > 0 ? CareFlow::appointment($pdo, $appointmentId) : null,
     ]);
   }
@@ -28,30 +30,37 @@ final class CareFlowController {
     try {
       if ($action === 'refer') {
         api_require_permission($pdo, 'careflow.update');
+        api_require_user_type($pdo, ['UBS']);
         api_success(CareFlow::refer($pdo, $input, $actorUserId), 201);
       }
       if ($action === 'confirm_receipt') {
         api_require_permission($pdo, 'careflow.update');
+        api_require_user_type($pdo, ['CADH']);
         api_success(['referral' => CareFlow::confirmReceipt($pdo, $input, $actorUserId)]);
       }
       if ($action === 'schedule') {
         api_require_permission($pdo, 'careflow.schedule');
+        api_require_user_type($pdo, ['CADH']);
         api_success(['appointment' => CareFlow::schedule($pdo, $input, $actorUserId)], 201);
       }
       if ($action === 'move') {
         api_require_permission($pdo, 'careflow.update');
+        api_require_user_type($pdo, ['CADH']);
         api_success(['appointment' => CareFlow::move($pdo, $input, $actorUserId)]);
       }
       if ($action === 'mark_not_performed') {
         api_require_permission($pdo, 'careflow.update');
+        api_require_user_type($pdo, ['CADH']);
         api_success(['appointment' => CareFlow::markNotPerformed($pdo, $input, $actorUserId)]);
       }
       if ($action === 'finalize') {
         api_require_permission($pdo, 'careflow.finalize');
+        api_require_user_type($pdo, ['CADH']);
         api_success(['patient' => CareFlow::finalize($pdo, $input, $actorUserId)]);
       }
       if ($action === 'reopen') {
         api_require_permission($pdo, 'careflow.finalize');
+        api_require_user_type($pdo, ['CADH']);
         api_success(['patient' => CareFlow::reopen($pdo, (int)($input['patient_id'] ?? 0), $actorUserId)]);
       }
       api_error('Ação inválida.', 422);
