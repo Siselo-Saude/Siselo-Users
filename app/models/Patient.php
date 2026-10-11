@@ -193,7 +193,6 @@ final class Patient {
     'responsible_name',
     'phone',
     'address',
-    'email',
     'emergency_contact',
     'allergies',
     'chronic_conditions',
