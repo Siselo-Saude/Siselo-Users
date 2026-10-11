@@ -17,6 +17,8 @@ services:
       - ./database_patch_009.sql:/docker-entrypoint-initdb.d/09-database_patch_009.sql:ro
       - ./database_patch_010.sql:/docker-entrypoint-initdb.d/10-database_patch_010.sql:ro
       - ./database_patch_011.sql:/docker-entrypoint-initdb.d/11-database_patch_011.sql:ro
+      - ./database_patch_012.sql:/docker-entrypoint-initdb.d/12-database_patch_012.sql:ro
+      - ./database_patch_013.sql:/docker-entrypoint-initdb.d/13-database_patch_013.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
@@ -38,27 +40,49 @@ services:
       - ./database_patch_009.sql:/migrations/database_patch_009.sql:ro
       - ./database_patch_010.sql:/migrations/database_patch_010.sql:ro
       - ./database_patch_011.sql:/migrations/database_patch_011.sql:ro
+      - ./database_patch_012.sql:/migrations/database_patch_012.sql:ro
+      - ./database_patch_013.sql:/migrations/database_patch_013.sql:ro
     entrypoint:
       - sh
       - -c
-      - mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_003.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_004.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_005.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_006.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_007.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_008.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_009.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_010.sql && mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_011.sql
+      - >-
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_003.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_004.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_005.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_006.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_007.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_008.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_009.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_010.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_011.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_012.sql &&
+        mysql -h db -uroot -prootpassword intranet_cadh < /migrations/database_patch_013.sql
 
   users:
     build: .
     restart: unless-stopped
     ports:
-      - "8086:80"
+      - "8087:80"
     depends_on:
       db:
         condition: service_healthy
       db-migrate:
         condition: service_completed_successfully
+
+    # Credenciais privadas do Google OAuth.
+    # O arquivo sera criado localmente e nao deve entrar no Git.
+    env_file:
+      - .env.google.local
+
     environment:
       DB_HOST: db
       DB_USER: root
       DB_PASSWORD: rootpassword
       DB_NAME: intranet_cadh
-      FRONTEND_ORIGIN: http://localhost:3000
+      FRONTEND_ORIGIN: http://localhost:3001
+
+      # URI de retorno cadastrada no Google Cloud.
+      GOOGLE_REDIRECT_URI: http://localhost:8087/api/auth/google/callback.php
 
   frontend:
     image: node:16
@@ -70,7 +94,7 @@ services:
     volumes:
       - ../Siselo-Frontend:/app
     ports:
-      - "3000:3000"
+      - "3001:3000"
 
 volumes:
   db_data:
