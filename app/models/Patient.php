@@ -190,7 +190,6 @@ final class Patient {
     'birth_date',
     'sex',
     'race',
-    'responsible_name',
     'phone',
     'address',
     'allergies',
@@ -207,7 +206,7 @@ final class Patient {
     'birth_date' => 'Data de nascimento',
     'sex' => 'Genero',
     'race' => 'Cor/Raca',
-    'responsible_name' => 'Responsavel',
+    'responsible_name' => 'Responsavel/Apoio Familiar',
     'phone' => 'Telefone',
     'address' => 'Endereco',
     'email' => 'Email',
@@ -220,6 +219,8 @@ final class Patient {
     'ubs_ref' => 'UBS de referencia',
     'team_ref' => 'Equipe',
   ];
+
+  private const MINOR_AGE_LIMIT = 18;
 
   private const FIELD_MAX_LENGTHS = [
     'full_name' => 180,
@@ -422,6 +423,19 @@ final class Patient {
 
     if ($data['team_ref'] !== '' && !array_key_exists($data['team_ref'], self::teamOptions())) {
       self::setError($errors, 'team_ref', 'Selecione uma equipe valida.');
+    }
+
+    if (
+      $data['responsible_name'] === ''
+      && $data['birth_date'] !== null
+      && self::isValidDate($data['birth_date'])
+      && self::isMinor($data['birth_date'])
+    ) {
+      self::setError(
+        $errors,
+        'responsible_name',
+        self::FIELD_LABELS['responsible_name'] . ' e obrigatorio para menores de ' . self::MINOR_AGE_LIMIT . ' anos.'
+      );
     }
 
     $phoneDigits = self::digitsOnly($data['phone']);
@@ -718,6 +732,15 @@ final class Patient {
       return $birth->diff(new DateTimeImmutable('today'))->y . ' anos';
     } catch (Throwable $error) {
       return '';
+    }
+  }
+
+  private static function isMinor(string $birthDate): bool {
+    try {
+      $birth = new DateTimeImmutable($birthDate);
+      return $birth->diff(new DateTimeImmutable('today'))->y < self::MINOR_AGE_LIMIT;
+    } catch (Throwable $error) {
+      return false;
     }
   }
 
