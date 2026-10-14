@@ -145,7 +145,8 @@ $params = [
     'nonce' => $nonce,
     'code_challenge' => $challenge,
     'code_challenge_method' => 'S256',
-    'prompt' => 'select_account',
+    // Sem forcar selecao de conta a cada acesso.
+    // Se houver sessao Google adequada, o provedor pode reutiliza-la.
 ];
 
 $authorizationUrl =
