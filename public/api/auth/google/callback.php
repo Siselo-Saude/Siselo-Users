@@ -31,6 +31,17 @@ function googleFinish(string $result, bool $success = false): never
     exit;
 }
 
+// Tela de cadastro/solicitacao quando o Google ja confirmou a identidade.
+function googleOnboardingFinish(): never
+{
+    $origin = rtrim(
+        (string)(getenv('FRONTEND_ORIGIN') ?: 'http://localhost:3001'),
+        '/'
+    );
+    header('Location: ' . $origin . '/google-access.html', true, 303);
+    exit;
+}
+
 /*
  * Diagnostico: registrar SOMENTE tipos e categorias de erro.
  * Nao gravar mensagens brutas de excecoes:
@@ -320,10 +331,36 @@ if ($mode === 'link') {
     googleFinish('vinculado', true);
 }
 
-// LOGIN: apenas identidades previamente vinculadas.
+// LOGIN: contas aprovadas e vinculadas entram; as demais acompanham
+// ou criam sua solicitacao sem receber permissoes automaticamente.
 if ($mode !== 'login') {
     googleFinish('modo_invalido');
 }
+
+// Nunca manter uma sessao autenticada anterior durante nova tentativa.
+unset($_SESSION['user_id'], $_SESSION['google_onboarding']);
+
+$email = trim((string)($claims['email'] ?? ''));
+$emailVerified = $claims['email_verified'] ?? false;
+
+if (!($emailVerified === true || $emailVerified === 'true') ||
+    filter_var($email, FILTER_VALIDATE_EMAIL) === false ||
+    strlen($email) > 190) {
+    googleFinish('email_nao_verificado');
+}
+
+$googleName = trim((string)($claims['name'] ?? ''));
+if ($googleName === '') {
+    $googleName = 'Usuario Google';
+}
+
+$googleOnboarding = [
+    'issuer' => $issuer,
+    'subject' => $subject,
+    'email' => $email,
+    'name' => $googleName,
+    'created_at' => time(),
+];
 
 $stmt = $pdo->prepare("
     SELECT user_id, id
@@ -342,7 +379,11 @@ $stmt->execute([
 $identity = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$identity) {
-    googleFinish('conta_nao_vinculada');
+    // Pode ser cadastro novo ou conta antiga que exige vinculo explicito.
+    // O formulario decide a experiencia sem receber o subject OIDC.
+    session_regenerate_id(true);
+    $_SESSION['google_onboarding'] = $googleOnboarding;
+    googleOnboardingFinish();
 }
 
 $user = User::findById(
@@ -350,10 +391,20 @@ $user = User::findById(
     (int) $identity['user_id']
 );
 
-if (
-    $user === null
-    || User::accessBlockMessage($user) !== null
-) {
+if ($user === null) {
+    googleFinish('usuario_nao_autorizado');
+}
+
+if ((int)($user['is_approved'] ?? 0) !== 1) {
+    if ((int)$user['is_active'] !== 1) {
+        googleFinish('usuario_nao_autorizado');
+    }
+    session_regenerate_id(true);
+    $_SESSION['google_onboarding'] = $googleOnboarding;
+    googleOnboardingFinish();
+}
+
+if (User::accessBlockMessage($user) !== null) {
     googleFinish('usuario_nao_autorizado');
 }
 
