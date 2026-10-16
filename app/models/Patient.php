@@ -190,11 +190,8 @@ final class Patient {
     'birth_date',
     'sex',
     'race',
-    'responsible_name',
     'phone',
     'address',
-    'email',
-    'emergency_contact',
     'allergies',
     'chronic_conditions',
     'risk_classification',
@@ -209,11 +206,12 @@ final class Patient {
     'birth_date' => 'Data de nascimento',
     'sex' => 'Genero',
     'race' => 'Cor/Raca',
-    'responsible_name' => 'Responsavel',
+    'responsible_name' => 'Responsavel/Apoio Familiar',
     'phone' => 'Telefone',
     'address' => 'Endereco',
     'email' => 'Email',
     'emergency_contact' => 'Contato de emergencia',
+    'emergency_contact_name' => 'Nome do contato de emergencia',
     'allergies' => 'Alergias',
     'chronic_conditions' => 'Condicoes cronicas',
     'status' => 'Status',
@@ -221,6 +219,8 @@ final class Patient {
     'ubs_ref' => 'UBS de referencia',
     'team_ref' => 'Equipe',
   ];
+
+  private const MINOR_AGE_LIMIT = 18;
 
   private const FIELD_MAX_LENGTHS = [
     'full_name' => 180,
@@ -232,6 +232,7 @@ final class Patient {
     'address' => 255,
     'email' => 190,
     'emergency_contact' => 15,
+    'emergency_contact_name' => 180,
     'status' => 20,
     'ubs_ref' => 120,
     'team_ref' => 120,
@@ -308,6 +309,7 @@ final class Patient {
       'address' => '',
       'email' => '',
       'emergency_contact' => '',
+      'emergency_contact_name' => '',
       'allergies' => '',
       'chronic_conditions' => '',
       'status' => 'ativo',
@@ -358,6 +360,7 @@ final class Patient {
       'address' => self::normalizeSingleLine((string)($payload['address'] ?? '')),
       'email' => trim((string)($payload['email'] ?? $payload['contact_email'] ?? '')),
       'emergency_contact' => trim((string)($payload['emergency_contact'] ?? '')),
+      'emergency_contact_name' => self::normalizeSingleLine((string)($payload['emergency_contact_name'] ?? '')),
       'health_insurance' => '',
       'blood_type' => '',
       'allergies' => trim((string)($payload['allergies'] ?? '')),
@@ -422,6 +425,19 @@ final class Patient {
       self::setError($errors, 'team_ref', 'Selecione uma equipe valida.');
     }
 
+    if (
+      $data['responsible_name'] === ''
+      && $data['birth_date'] !== null
+      && self::isValidDate($data['birth_date'])
+      && self::isMinor($data['birth_date'])
+    ) {
+      self::setError(
+        $errors,
+        'responsible_name',
+        self::FIELD_LABELS['responsible_name'] . ' e obrigatorio para menores de ' . self::MINOR_AGE_LIMIT . ' anos.'
+      );
+    }
+
     $phoneDigits = self::digitsOnly($data['phone']);
     if ($data['phone'] !== '' && !self::isValidPhone($phoneDigits)) {
       self::setError($errors, 'phone', 'Telefone deve ter 10, 11 ou 3 digitos.');
@@ -476,6 +492,7 @@ final class Patient {
             address = :address,
             email = :email,
             emergency_contact = :emergency_contact,
+            emergency_contact_name = :emergency_contact_name,
             health_insurance = :health_insurance,
             blood_type = :blood_type,
             allergies = :allergies,
@@ -496,9 +513,9 @@ final class Patient {
         $data['care_status'] = 'recebido';
         $stmt = $pdo->prepare(
           'INSERT INTO patients
-          (first_cadh_date, full_name, ses, cpf, birth_date, sex, race, responsible_name, phone, address, email, emergency_contact, health_insurance, blood_type, allergies, chronic_conditions, status, risk_classification, care_status, ubs_ref, team_ref)
+          (first_cadh_date, full_name, ses, cpf, birth_date, sex, race, responsible_name, phone, address, email, emergency_contact, emergency_contact_name, health_insurance, blood_type, allergies, chronic_conditions, status, risk_classification, care_status, ubs_ref, team_ref)
           VALUES
-          (:first_cadh_date, :full_name, :ses, :cpf, :birth_date, :sex, :race, :responsible_name, :phone, :address, :email, :emergency_contact, :health_insurance, :blood_type, :allergies, :chronic_conditions, :status, :risk_classification, :care_status, :ubs_ref, :team_ref)'
+          (:first_cadh_date, :full_name, :ses, :cpf, :birth_date, :sex, :race, :responsible_name, :phone, :address, :email, :emergency_contact, :emergency_contact_name, :health_insurance, :blood_type, :allergies, :chronic_conditions, :status, :risk_classification, :care_status, :ubs_ref, :team_ref)'
         );
         $stmt->execute($data);
         $patientId = (int)$pdo->lastInsertId();
@@ -715,6 +732,15 @@ final class Patient {
       return $birth->diff(new DateTimeImmutable('today'))->y . ' anos';
     } catch (Throwable $error) {
       return '';
+    }
+  }
+
+  private static function isMinor(string $birthDate): bool {
+    try {
+      $birth = new DateTimeImmutable($birthDate);
+      return $birth->diff(new DateTimeImmutable('today'))->y < self::MINOR_AGE_LIMIT;
+    } catch (Throwable $error) {
+      return false;
     }
   }
 
