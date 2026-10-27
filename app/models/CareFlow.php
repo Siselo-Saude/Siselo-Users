@@ -14,7 +14,7 @@ final class CareFlow {
   private const CARE_STATUS_OPTIONS = [
     'recebido' => 'Recebido da UBS',
     'em_acompanhamento' => 'Em acompanhamento',
-    'finalizado' => 'Finalizado',
+    'finalizado' => 'Transição do cuidado',
   ];
 
   private const APPOINTMENT_STATUS_OPTIONS = [
@@ -56,7 +56,7 @@ final class CareFlow {
   private const FINALIZATION_REASONS = [
     'obito' => 'Óbito',
     'ausencia' => 'Ausência',
-    'tratamento_finalizado' => 'Tratamento finalizado',
+    'tratamento_finalizado' => 'Transição do cuidado (continuidade na APS)',
     'outro' => 'Outro',
   ];
 
@@ -202,7 +202,7 @@ final class CareFlow {
 
     $before = self::findPatient($pdo, $patientId);
     if ($before === null || (string)($before['care_status'] ?? '') === 'finalizado') {
-      throw new RuntimeException('Paciente nao encontrado ou ja finalizado.');
+      throw new RuntimeException('Paciente não encontrado ou com transição do cuidado já realizada no CADH.');
     }
 
     $pdo->beginTransaction();
@@ -235,7 +235,7 @@ final class CareFlow {
       if (!$transition) {
         $fromService = trim((string)($before['ubs_ref'] ?? ''));
         $fromService = $fromService !== '' ? $fromService : 'UBS';
-        $notes = 'Encaminhamento da UBS para o CADH. Classificacao: ' . self::RISK_OPTIONS[$risk] . '.';
+        $notes = 'Compartilhamento do cuidado da UBS com o CADH. Classificação: ' . self::RISK_OPTIONS[$risk] . '.';
         $insert = $pdo->prepare("
           INSERT INTO transitions
             (patient_id, transition_date, from_service, to_service, status, notes, created_by_user_id)
@@ -356,12 +356,12 @@ final class CareFlow {
   public static function confirmReceipt(PDO $pdo, array $payload, int $actorUserId): array {
     $patientId = (int)($payload['patient_id'] ?? 0);
     if ($patientId <= 0) {
-      throw new InvalidArgumentException('Selecione um encaminhamento.');
+      throw new InvalidArgumentException('Selecione um compartilhamento do cuidado.');
     }
 
     $before = self::findCadhReferral($pdo, $patientId);
     if ($before === null) {
-      throw new RuntimeException('Encaminhamento para o CADH não encontrado.');
+      throw new RuntimeException('Compartilhamento do cuidado com o CADH não encontrado.');
     }
     if (!empty($before['received_at'])) {
       return self::serializeRow($before);
@@ -382,7 +382,7 @@ final class CareFlow {
 
       $referral = self::findCadhReferral($pdo, $patientId);
       if ($referral === null) {
-        throw new RuntimeException('Encaminhamento para o CADH não encontrado.');
+        throw new RuntimeException('Compartilhamento do cuidado com o CADH não encontrado.');
       }
 
       if ($stmt->rowCount() > 0) {
@@ -510,10 +510,10 @@ final class CareFlow {
     $reason = trim((string)($payload['reason'] ?? ''));
     $notes = trim((string)($payload['notes'] ?? ''));
     if ($patientId <= 0 || !array_key_exists($reason, self::FINALIZATION_REASONS)) {
-      throw new InvalidArgumentException('Paciente ou motivo de finalização inválido.');
+      throw new InvalidArgumentException('Paciente ou motivo de transição do cuidado inválido.');
     }
     if ($reason === 'outro' && $notes === '') {
-      throw new InvalidArgumentException('Descreva o motivo da finalização.');
+      throw new InvalidArgumentException('Descreva o motivo da transição do cuidado.');
     }
 
     $before = self::findPatient($pdo, $patientId);
@@ -576,7 +576,7 @@ final class CareFlow {
     ");
     $stmt->execute([':id' => $patientId]);
     if ($stmt->fetchColumn() === false) {
-      throw new RuntimeException('Paciente não encontrado ou já finalizado.');
+      throw new RuntimeException('Paciente não encontrado ou com transição do cuidado já realizada no CADH.');
     }
   }
 

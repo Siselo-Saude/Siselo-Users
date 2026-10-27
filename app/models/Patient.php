@@ -655,7 +655,7 @@ final class Patient {
   }
 
   public static function transitionsFor(PDO $pdo, int $patientId): array {
-    $stmt = $pdo->prepare('SELECT * FROM transitions WHERE patient_id = :patient_id AND deleted_at IS NULL ORDER BY transition_date DESC, id DESC');
+    $stmt = $pdo->prepare("SELECT *, CASE status WHEN 'pendente' THEN 'Pendente' WHEN 'em_andamento' THEN 'Em andamento' WHEN 'concluida' THEN 'Concluída' WHEN 'cancelada' THEN 'Cancelada' ELSE status END AS status_label, CASE WHEN UPPER(TRIM(to_service)) LIKE 'CADH%' THEN 'compartilhamento_cuidado' ELSE 'transicao_cuidado' END AS flow_type, CASE WHEN UPPER(TRIM(to_service)) LIKE 'CADH%' THEN 'Compartilhamento do cuidado (UBS → CADH)' ELSE 'Transição do cuidado (CADH → APS)' END AS flow_type_label FROM transitions WHERE patient_id = :patient_id AND deleted_at IS NULL ORDER BY transition_date DESC, id DESC");
     $stmt->execute([':patient_id' => $patientId]);
     return $stmt->fetchAll();
   }
