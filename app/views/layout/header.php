@@ -53,7 +53,7 @@ declare(strict_types=1);
     <?php endif; ?>
 
     <?php if (can($pdo, 'transitions.view')): ?>
-      <a href="/transitions/list.php">Encaminhamentos</a>
+      <a href="/transitions/list.php">Transições do Cuidado</a>
     <?php endif; ?>
 
     <?php if (can($pdo, 'admin.manage')): ?>

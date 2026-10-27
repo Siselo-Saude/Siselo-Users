@@ -5,6 +5,13 @@ require_once __DIR__ . '/CarePlan.php';
 require_once __DIR__ . '/../services/Audit.php';
 
 final class Transition {
+  private const STATUS_LABELS = [
+    'pendente' => 'Pendente',
+    'em_andamento' => 'Em andamento',
+    'concluida' => 'Concluída',
+    'cancelada' => 'Cancelada',
+  ];
+
   public static function statuses(): array {
     return ['pendente', 'em_andamento', 'concluida', 'cancelada'];
   }
@@ -43,7 +50,7 @@ final class Transition {
       static function (array $row): array {
         $row['id'] = (int)$row['id'];
         $row['patient_id'] = (int)$row['patient_id'];
-        return $row;
+        return self::serializeRow($row);
       },
       $rows
     );
@@ -65,7 +72,7 @@ final class Transition {
 
     $row['id'] = (int)$row['id'];
     $row['patient_id'] = (int)$row['patient_id'];
-    return $row;
+    return self::serializeRow($row);
   }
 
   public static function patientOptions(PDO $pdo): array {
@@ -83,7 +90,8 @@ final class Transition {
           'row' => null,
           'patients' => self::patientOptions($pdo),
           'statuses' => self::statuses(),
-          'error' => 'Encaminhamento nao encontrado.',
+          'status_labels' => self::STATUS_LABELS,
+          'error' => 'Transição do cuidado não encontrada.',
         ];
       }
     } else {
@@ -102,6 +110,7 @@ final class Transition {
       'row' => $row,
       'patients' => self::patientOptions($pdo),
       'statuses' => self::statuses(),
+      'status_labels' => self::STATUS_LABELS,
       'error' => null,
     ];
   }
@@ -138,7 +147,7 @@ final class Transition {
     if ($editing) {
       $before = self::find($pdo, $id);
       if ($before === null) {
-        throw new RuntimeException('Encaminhamento nao encontrado.');
+        throw new RuntimeException('Transição do cuidado não encontrada.');
       }
 
       $stmt = $pdo->prepare('
@@ -216,5 +225,19 @@ final class Transition {
     Audit::log($pdo, $actorUserId, 'destroy', 'transitions', $id, $before, null);
 
     return $before;
+  }
+
+  public static function serializeRow(array $row): array {
+    $row['id'] = (int)$row['id'];
+    $row['patient_id'] = (int)$row['patient_id'];
+    $status = (string)($row['status'] ?? 'pendente');
+    $toService = strtoupper(trim((string)($row['to_service'] ?? '')));
+    $isCadhSharing = str_starts_with($toService, 'CADH');
+    $row['status_label'] = self::STATUS_LABELS[$status] ?? $status;
+    $row['flow_type'] = $isCadhSharing ? 'compartilhamento_cuidado' : 'transicao_cuidado';
+    $row['flow_type_label'] = $isCadhSharing
+      ? 'Compartilhamento do cuidado (UBS → CADH)'
+      : 'Transição do cuidado (CADH → APS)';
+    return $row;
   }
 }
