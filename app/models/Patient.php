@@ -169,7 +169,7 @@ final class Patient {
       ],
     ],
     [
-      'ubs' => 'UBS 1 JARDINS MANGUEIRAL',
+      'ubs' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
       'teams' => [
         'ESF DIAMANTE',
         'ESF AMETISTA',
@@ -180,7 +180,7 @@ final class Patient {
         'EMULTI RUBI',
       ],
     ],
-    ['ubs' => 'UBS 03 JARDIM BOTANICO', 'teams' => ['ESF TORORO']],
+    ['ubs' => 'UBS 03 JARDIM BOTÂNICO – Tororó', 'teams' => ['ESF TORORO']],
   ];
 
   private const REQUIRED_FIELDS = [
@@ -368,7 +368,10 @@ final class Patient {
       'status' => self::normalizeOptionValue((string)($payload['status'] ?? 'ativo'), self::STATUS_OPTIONS),
       'risk_classification' => self::normalizeOptionValue((string)($payload['risk_classification'] ?? 'alto_risco'), self::RISK_OPTIONS),
       'care_status' => self::normalizeSingleLine((string)($payload['care_status'] ?? 'recebido')),
-      'ubs_ref' => self::normalizeSingleLine((string)($payload['uds_reference'] ?? $payload['ubs_ref'] ?? '')),
+      'ubs_ref' => self::normalizeOptionValue(
+        self::normalizeSingleLine((string)($payload['uds_reference'] ?? $payload['ubs_ref'] ?? '')),
+        self::ubsOptions()
+      ),
       'team_ref' => $teamRef,
     ];
 
@@ -770,6 +773,22 @@ final class Patient {
     $normalizedValue = self::normalizeOptionComparable($value);
     $aliases = [
       'amarelo' => 'amarela',
+      'ubs 1' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
+      'ubs 01' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
+      'ubs 1 jardins mangueiral' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
+      'ubs 01 jardins mangueiral' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
+      'ubs 1 jardim botanico' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
+      'ubs 01 jardim botanico' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
+      'ubs 1 jardim botanico jardins mangueiral' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
+      'ubs 01 jardim botanico jardins mangueiral' => 'UBS 01 JARDIM BOTÂNICO – Jardins Mangueiral',
+      'ubs 3' => 'UBS 03 JARDIM BOTÂNICO – Tororó',
+      'ubs 03' => 'UBS 03 JARDIM BOTÂNICO – Tororó',
+      'ubs 3 jardim botanico' => 'UBS 03 JARDIM BOTÂNICO – Tororó',
+      'ubs 03 jardim botanico' => 'UBS 03 JARDIM BOTÂNICO – Tororó',
+      'ubs 3 tororo' => 'UBS 03 JARDIM BOTÂNICO – Tororó',
+      'ubs 03 tororo' => 'UBS 03 JARDIM BOTÂNICO – Tororó',
+      'ubs 3 jardim botanico tororo' => 'UBS 03 JARDIM BOTÂNICO – Tororó',
+      'ubs 03 jardim botanico tororo' => 'UBS 03 JARDIM BOTÂNICO – Tororó',
     ];
 
     if (isset($aliases[$normalizedValue])) {
